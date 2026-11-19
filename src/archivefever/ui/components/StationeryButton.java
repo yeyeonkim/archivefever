@@ -26,7 +26,7 @@ public final class StationeryButton extends JButton {
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         getAccessibleContext().setAccessibleName(name);
         hoverAnimation=new Timer(15,e->{
-            float target=hovered?6:0;
+            float target=(hovered||active)?6:0;
             hoverLift+=(target-hoverLift)*.3f;
             if(Math.abs(target-hoverLift)<.15f){hoverLift=target;((Timer)e.getSource()).stop();}
             repaint();
@@ -81,7 +81,7 @@ public final class StationeryButton extends JButton {
                 (int)Math.ceil((rotatedWidth+2*PAD)*scale),
                 (int)Math.ceil((rotatedHeight+2*PAD)*scale));
     }
-    public void setActive(boolean active){this.active=active;repaint();}
+    public void setActive(boolean active){this.active=active;hoverAnimation.start();repaint();}
     public boolean isActive(){return active;}
     @Override public boolean contains(int x,int y) {
         return opaque(x/displayScale,y/displayScale+hoverLift) || opaque(x/displayScale,y/displayScale);
