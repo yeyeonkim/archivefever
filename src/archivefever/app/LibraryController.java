@@ -60,12 +60,22 @@ public final class LibraryController {
         background(this::loadShelf,books->{if(load==shelfGeneration)shelf.setBooks(books);},error->{});
     }
 
-    /** Called when the add-book camera screen comes into view (or back into view) or leaves it. */
+    /**
+     * Called when a camera screen (add book, or sentence capture) comes into view or back
+     * into view, or when the UI leaves it. Both screens draw the same camera.
+     */
     public void cameraScreen(boolean showing) {
         java.awt.Rectangle display=CameraScanPanel.DISPLAY;
         if(showing)host.showCamera(display.x,display.y,display.width,display.height,CameraScanPanel.DISPLAY_CORNER);
         else host.hideCamera();
     }
+
+    /**
+     * Called when the sentence-capture screen's scan button is pressed: the host takes the
+     * page photo now and keeps the picture on its preview. Nothing is uploaded yet; text
+     * recognition and saving sentences are not built.
+     */
+    public void pageCaptured() {host.capturePhoto();}
 
     /** Called when the confirmation popup has just opened for a new scan. */
     public void scanStarted() {

@@ -121,6 +121,8 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
       _stopCamera();
       return;
     }
+    // A shot from the last visit (a sentence page, say) must not be sent with the next scan.
+    _shot = null;
     setState(() {
       _cameraPlace = request;
       _reviewing = false;

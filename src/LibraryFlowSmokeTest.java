@@ -191,6 +191,24 @@ public class LibraryFlowSmokeTest {
         require(!cancelled.contains("scan-1"),"A confirmed scan is not cancelled");
         require(lastHostEvent().equals("hide"),"The preview goes away with the camera screen: "+lastHostEvent());
 
+        // Sentence capture for a shelf book: same camera, and the photo is taken at the press.
+        edt(()->{
+            Component spine=find(app,Bookshelf.class).getComponent(0);
+            spine.dispatchEvent(new java.awt.event.MouseEvent(spine,java.awt.event.MouseEvent.MOUSE_CLICKED,
+                    System.currentTimeMillis(),0,3,3,1,false));
+            return true;
+        });
+        click("책 스캔 선택");
+        require(lastHostEvent().equals("show 52,141 272x369"),"Sentence capture asks for the live preview: "+lastHostEvent());
+        int requestsBefore=scanRequests.size();
+        click("문장 촬영");
+        require(lastHostEvent().equals("capture"),"Page photo is taken at the press: "+lastHostEvent());
+        require(edt(()->named(app,"문장 저장")!=null),"Sentence screen moves on to its save state");
+        Thread.sleep(300);
+        require(scanRequests.size()==requestsBefore && created.get()==1,"A page photo starts no book scan");
+        edt(()->{app.navigate(Destination.ARCHIVE);return true;});
+        require(lastHostEvent().equals("hide"),"Leaving sentence capture turns the preview off: "+lastHostEvent());
+
         // Photo has no barcode: say so and offer nothing.
         startScan("scan-2");
         scans.put("scan-2","NO_BARCODE");
@@ -215,7 +233,7 @@ public class LibraryFlowSmokeTest {
         click("도서 스캔");
         waitFor("request failed message",()->"request failed".equals(statusText()));
 
-        System.out.println("PASS: JSON, server shelf, YES24 credit, camera preview requests, capture at press, scan -> book -> confirm -> shelf, no barcode, cancel, late answer, server down");
+        System.out.println("PASS: JSON, server shelf, YES24 credit, camera preview requests, capture at press, scan -> book -> confirm -> shelf, sentence capture, no barcode, cancel, late answer, server down");
     }
 
     public static void main(String[] args) {

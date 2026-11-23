@@ -127,9 +127,11 @@ public final class AppShell extends JPanel {
         screens.show(content,"sentence-scan");
         navigation.setDestination(Destination.ARCHIVE);navigation.setSentenceCaptureLayout(true);navigation.setVisible(true);
         sentenceScanPanel.requestFocusInWindow();repaint();
+        if(library!=null)library.cameraScreen(true);
     }
     private void captureSentence(){
         if(!loggedIn || sentenceScanPanel.selectedBook()==null || sentenceScanPanel.isCaptured())return;
+        if(library!=null)library.pageCaptured();
         shutterSound.run();sentenceScanPanel.showCaptured();repaint();
     }
 

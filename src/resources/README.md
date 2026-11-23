@@ -140,3 +140,17 @@ opening a different book starts a fresh capture. No status bars are rendered.
 
 SentenceScanFlowSmokeTest exercises scaled book/scan clicks, book context,
 shutter count, transition/reset and independence from add-book registration.
+
+## Live camera on the phone
+
+When the UI runs inside the phone app (see backend/README.md and mobile/README.md), the
+app draws its live camera picture over the blank display of the camera illustration,
+on both camera screens. CameraScanPanel.DISPLAY is that opening in design coordinates;
+change it together with the camera artwork.
+
+AppShell tells the host when a camera screen comes into view or is left, and when its
+scan button is pressed (HostBridge.showCamera / hideCamera / capturePhoto), so the photo
+is taken at the press. On Add book the photo is then uploaded to the server's scan and the
+confirmation popup shows the book. On Archive sentence the picture simply stays on the
+display with the save state: recognition and saving are still for the OCR owner to add.
+On the desktop none of this happens and both screens behave as described above.
