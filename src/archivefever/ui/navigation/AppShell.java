@@ -37,6 +37,7 @@ public final class AppShell extends JPanel {
     private final Runnable editSound;
     private Destination currentDestination;
     private boolean loggedIn;
+    private boolean embedded;
     private final MainPanel mainPanel;
     private LibraryController library;
     private JFrame readingFrame;
@@ -181,6 +182,12 @@ public final class AppShell extends JPanel {
 
     public Destination currentDestination() {return currentDestination;}
 
+    /**
+     * For a window whose size belongs to its host (a browser display): the reading screen
+     * then takes over the window as it is, instead of resizing it.
+     */
+    public void setEmbedded(boolean embedded) {this.embedded=embedded;}
+
     public boolean isReading() {return readingPanel!=null;}
 
     public boolean isExpandedMode() {return readingPanel!=null && readingPanel.isExpandedMode();}
@@ -295,9 +302,9 @@ public final class AppShell extends JPanel {
         mainWindowLocation=frame.getLocation();
         mainWindowResizable=frame.isResizable();
         readingPanel=panel;
-        frame.setResizable(true);
+        if(!embedded)frame.setResizable(true);
         frame.setContentPane(readingPanel);
-        frame.setSize(readingWindowSize(frame,false));
+        if(!embedded)frame.setSize(readingWindowSize(frame,false));
         frame.revalidate();
         frame.repaint();
     }
@@ -308,9 +315,11 @@ public final class AppShell extends JPanel {
         if(readingTransition!=null){readingTransition.stop();readingTransition=null;}
         readingPanel.finishTransition();
         frame.setContentPane(mainContentPane);
-        frame.setResizable(mainWindowResizable);
-        frame.setSize(mainWindowSize);
-        frame.setLocation(mainWindowLocation);
+        if(!embedded) {
+            frame.setResizable(mainWindowResizable);
+            frame.setSize(mainWindowSize);
+            frame.setLocation(mainWindowLocation);
+        }
         frame.revalidate();
         frame.repaint();
         readingPanel=null;
