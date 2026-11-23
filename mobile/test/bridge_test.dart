@@ -46,6 +46,43 @@ void main() {
       expect(BridgeMessage.parse('{"type":"capture"}'), isA<CaptureRequest>());
     });
 
+    test('tells a display that only moved from one that came into view', () {
+      const place = '"x":45,"y":123,"width":237,"height":322,"radius":7';
+
+      expect((BridgeMessage.parse('{"type":"camera","visible":true,$place}') as CameraRequest).moved, isFalse);
+      expect((BridgeMessage.parse('{"type":"camera","visible":true,$place,"moved":false}') as CameraRequest).moved, isFalse);
+      expect((BridgeMessage.parse('{"type":"camera","visible":true,$place,"moved":true}') as CameraRequest).moved, isTrue);
+    });
+
+    test('reads the request to photograph a book page', () {
+      expect(BridgeMessage.parse('{"type":"capturePage"}'), isA<PageCaptureRequest>());
+    });
+
+    test('reads the request to save the picked lines', () {
+      final message = BridgeMessage.parse('{"type":"savePassage","request":3,"isbn13":"9788936434120"}');
+
+      final request = message as SavePassageRequest;
+      expect(request.request, 3);
+      expect(request.isbn13, '9788936434120');
+    });
+
+    test('rejects save requests it could not answer or that could change the request path', () {
+      expect(BridgeMessage.parse('{"type":"savePassage","isbn13":"9788936434120"}'), isNull);
+      expect(BridgeMessage.parse('{"type":"savePassage","request":0,"isbn13":"9788936434120"}'), isNull);
+      expect(BridgeMessage.parse('{"type":"savePassage","request":1.5,"isbn13":"9788936434120"}'), isNull);
+      expect(BridgeMessage.parse('{"type":"savePassage","request":"3","isbn13":"9788936434120"}'), isNull);
+      expect(BridgeMessage.parse('{"type":"savePassage","request":99999999999,"isbn13":"9788936434120"}'), isNull);
+      expect(BridgeMessage.parse('{"type":"savePassage","request":3}'), isNull);
+      expect(BridgeMessage.parse('{"type":"savePassage","request":3,"isbn13":"978893643412"}'), isNull);
+      expect(BridgeMessage.parse('{"type":"savePassage","request":3,"isbn13":"../../scans/x"}'), isNull);
+      expect(BridgeMessage.parse('{"type":"savePassage","request":3,"isbn13":9788936434120}'), isNull);
+    });
+
+    test('answers the page with the outcome numbers the Swing UI expects', () {
+      // The order of archivefever.host.HostBridge.PassageResult.
+      expect(PassageOutcome.values.map((outcome) => outcome.name), ['saved', 'nothingPicked', 'cancelled', 'failed']);
+    });
+
     test('reads the ready signal', () {
       expect(BridgeMessage.parse('{"type":"ready"}'), isA<PageReady>());
     });

@@ -42,3 +42,9 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Korean model for reading book pages on the phone; the text recognition plugin
+    // bundles only the Latin one.
+    implementation("com.google.mlkit:text-recognition-korean:16.0.1")
+}

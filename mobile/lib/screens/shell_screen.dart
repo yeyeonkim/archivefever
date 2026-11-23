@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,13 +9,18 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../bridge.dart';
 import '../exit_guard.dart';
+import '../page_text.dart';
+import '../passage_service.dart';
 import '../scan_service.dart';
 import '../server.dart';
 import '../settings.dart';
+import '../text_reader.dart';
+import 'page_picker.dart';
+import 'passage_dialog.dart';
 import 'server_setup_screen.dart';
 
 /// Shows the Swing UI served by the backend, and does for it what a web page cannot:
-/// show the camera, take photos and open outside links.
+/// show the camera, take photos, read the text on a page photo and open outside links.
 class ShellScreen extends StatefulWidget {
   const ShellScreen({super.key, required this.server, required this.settings});
 
@@ -27,6 +35,8 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
   static const Color _backdrop = Color(0xFF2B211A);
 
   late final ScanService _scans = ScanService(server: widget.server, pending: widget.settings);
+  late final PassageService _passages = PassageService(server: widget.server);
+  final TextReader _reader = MlKitTextReader();
   final ExitGuard _exitGuard = ExitGuard();
   late final WebViewController _web;
   bool _uploading = false;
@@ -47,6 +57,10 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
   /// After a shot the Swing UI shows its result popup where the preview was, so the
   /// preview steps aside until the camera screen asks for it again.
   bool _reviewing = false;
+
+  /// The page photo taken on the sentence screen, shown in place of the live preview for
+  /// the reader to pick lines on; null on the book screen and before the shot.
+  _PageReview? _page;
 
   @override
   void initState() {
@@ -78,6 +92,8 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _camera?.dispose();
+    _page?.photo?.dispose();
+    _reader.close();
     super.dispose();
   }
 
@@ -86,7 +102,8 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
       _stopCamera();
-    } else if (state == AppLifecycleState.resumed && _cameraPlace != null && !_reviewing) {
+    } else if (state == AppLifecycleState.resumed && _cameraPlace != null && !_reviewing && _page == null) {
+      // A page under review needs no camera; it starts again if the reader retakes the photo.
       _startCamera();
     }
   }
@@ -103,6 +120,10 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
         _placeCamera(request);
       case CaptureRequest():
         _capture();
+      case PageCaptureRequest():
+        _capturePage();
+      case SavePassageRequest(:final request, :final isbn13):
+        _savePassage(request, isbn13);
       case ScanRequest(:final scanId):
         _scan(scanId);
       case OpenUrlRequest(:final url):
@@ -117,12 +138,20 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
 
   void _placeCamera(CameraRequest request) {
     if (request.rect == null) {
+      _dropPage();
       setState(() => _cameraPlace = null);
       _stopCamera();
       return;
     }
-    // A shot from the last visit (a sentence page, say) must not be sent with the next scan.
+    if (request.moved && _cameraPlace != null) {
+      // Same screen, laid out again (the keyboard opening does that): only the place changes.
+      setState(() => _cameraPlace = request);
+      return;
+    }
+    // A shot from the last visit must not be sent with the next scan, and a page under
+    // review gives way to the live preview: this is how its photo is retaken.
     _shot = null;
+    _dropPage();
     setState(() {
       _cameraPlace = request;
       _reviewing = false;
@@ -180,6 +209,86 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
         return null;
       }
     }();
+  }
+
+  // --- Collecting sentences ---------------------------------------------------------
+
+  /// Scan was pressed on the sentence screen: photograph the page, show the photo where
+  /// the preview was and read its text, all on the phone.
+  Future<void> _capturePage() async {
+    final camera = _camera;
+    if (camera == null || !camera.value.isInitialized || camera.value.isTakingPicture) return;
+    final review = _PageReview();
+    _dropPage();
+    setState(() => _page = review);
+    try {
+      final shot = await camera.takePicture();
+      await camera.pausePreview().catchError((Object _) {});
+      final file = File(shot.path);
+      try {
+        final photo = await decodeImageFromList(await file.readAsBytes());
+        if (!mounted || _page != review) {
+          photo.dispose();
+          return;
+        }
+        setState(() => review.photo = photo);
+        final lines = await _reader.read(shot.path);
+        if (!mounted || _page != review) return;
+        setState(() => review.lines = lines);
+      } finally {
+        // The photo was only needed to read the text and to show it; neither needs the file.
+        file.delete().ignore();
+      }
+    } on Exception {
+      if (mounted && _page == review) setState(() => review.unreadable = true);
+    }
+  }
+
+  void _dropPage() {
+    final photo = _page?.photo;
+    if (_page == null) return;
+    setState(() => _page = null);
+    // Released once the frame that stops drawing it is done.
+    if (photo != null) WidgetsBinding.instance.addPostFrameCallback((_) => photo.dispose());
+  }
+
+  /// Save was pressed on the sentence screen: let the reader check the picked lines and
+  /// the page number, save them, and tell the Swing UI how it went.
+  Future<void> _savePassage(int request, String isbn13) async {
+    final review = _page;
+    final lines = review?.lines;
+    if (review == null || lines == null || review.picked.isEmpty) {
+      final String message;
+      if (review == null) {
+        // No camera, or no permission to use it: there was nothing to photograph.
+        message = '페이지 사진이 없어요. 카메라 권한을 확인해 주세요.';
+      } else if (lines == null && !review.unreadable) {
+        message = '아직 글자를 읽는 중이에요.';
+      } else {
+        message = '저장할 줄을 먼저 눌러 고르세요.';
+      }
+      _showMessage(message);
+      _reply(request, PassageOutcome.nothingPicked);
+      return;
+    }
+    final picked = review.picked.toList()..sort();
+    final saved = await showPassageDialog(
+      context,
+      text: joinLines(picked.map((line) => lines[line].text)),
+      page: guessPageNumber(lines),
+      save: (text, page) => _passages.save(isbn13: isbn13, text: text, page: page),
+    );
+    if (mounted) _reply(request, saved ? PassageOutcome.saved : PassageOutcome.cancelled);
+  }
+
+  void _reply(int request, PassageOutcome outcome) {
+    _web.runJavaScript('window.hostReply && window.hostReply($request, ${outcome.index})').catchError((Object _) {});
+  }
+
+  /// "Retake" under the page photo. The Swing UI treats Back on a captured page as
+  /// "another photo" and asks for the live preview again.
+  void _retakePage() {
+    _web.runJavaScript('window.hostBack && window.hostBack()').catchError((Object _) {});
   }
 
   // --- Scanning -----------------------------------------------------------------------
@@ -242,7 +351,9 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
   }
 
   void _showMessage(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
   }
 
   void _reload() {
@@ -261,6 +372,8 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
     final camera = _camera;
     final place = _cameraPlace;
     final showPreview = camera != null && place != null && !_reviewing && _loadError == null;
+    final review = _page;
+    final pagePhoto = review?.photo;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -274,7 +387,22 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
               WebViewWidget(controller: _web),
               // The page and this stack share one origin and one unit, so the rectangle
               // the Swing UI reports is where its camera display is on screen.
-              if (showPreview)
+              if (review != null && pagePhoto != null && place != null && _loadError == null)
+                Positioned.fromRect(
+                  rect: place.rect!,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(place.radius),
+                    child: PagePicker(
+                      photo: pagePhoto,
+                      lines: review.lines,
+                      picked: review.picked,
+                      unreadable: review.unreadable,
+                      onChanged: (picked) => setState(() => review.picked = picked),
+                      onRetake: _retakePage,
+                    ),
+                  ),
+                )
+              else if (showPreview)
                 Positioned.fromRect(
                   rect: place.rect!,
                   child: IgnorePointer(
@@ -297,6 +425,21 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+/// A page photo under review on the sentence screen.
+class _PageReview {
+  /// The photo, upright; null until it has been taken and decoded.
+  ui.Image? photo;
+
+  /// The lines of text found on it; null while it is being read.
+  List<PageLine>? lines;
+
+  /// Which of [lines] the reader has picked to save.
+  Set<int> picked = {};
+
+  /// Taking the photo or reading it failed.
+  bool unreadable = false;
 }
 
 /// The camera picture, filling its box and cropped rather than stretched.
