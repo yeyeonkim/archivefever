@@ -1,5 +1,6 @@
 package archivefever.ui.navigation;
 
+import archivefever.app.LibraryController;
 import archivefever.mock.DemoBooks;
 import archivefever.mock.DemoSocial;
 import archivefever.model.BookSwap;
@@ -36,6 +37,8 @@ public final class AppShell extends JPanel {
     private final Runnable editSound;
     private Destination currentDestination;
     private boolean loggedIn;
+    private final MainPanel mainPanel;
+    private LibraryController library;
     private JFrame readingFrame;
     private Container mainContentPane;
     private Dimension mainWindowSize;
@@ -63,7 +66,8 @@ public final class AppShell extends JPanel {
         setPreferredSize(new Dimension(AppTheme.WIDTH,AppTheme.HEIGHT));
         content.setBounds(0,0,412,917);
         content.add(new LoginPanel(this::onKakaoLogin),"login");
-        content.add(new MainPanel(DemoBooks.load(),this::showBookSelection),Destination.ARCHIVE.name());
+        mainPanel=new MainPanel(DemoBooks.load(),this::showBookSelection);
+        content.add(mainPanel,Destination.ARCHIVE.name());
         menuPanel=new MenuPanel(this::showNotifications,this::showProfile,()->{
             if(loggedIn && currentDestination==Destination.MENU)this.editSound.run();
         });
@@ -94,6 +98,7 @@ public final class AppShell extends JPanel {
             popup.setBounds(0,0,412,917);popup.setVisible(false);add(popup,0);
         }
         scanPopup=new ScanConfirmationPopup(this::dismissScanConfirmation,()->{
+            if(library!=null){library.confirm();return;}
             dismissScanConfirmation();navigate(Destination.ARCHIVE);
         });
         scanPopup.setBounds(0,0,412,917);scanPopup.setVisible(false);add(scanPopup,0);
@@ -130,9 +135,16 @@ public final class AppShell extends JPanel {
         if(!loggedIn || currentDestination!=Destination.ADD_BOOK || scanPopup.isVisible())return;
         scanPopup.resetResult();addBookPanel.setReviewing(true);
         shutterSound.run();scanPopup.setVisible(true);scanPopup.requestFocusInWindow();repaint();
+        if(library!=null)library.scanStarted();
     }
     private void dismissScanConfirmation(){
+        if(library!=null)library.cancel();
         scanPopup.setVisible(false);addBookPanel.setReviewing(false);repaint();
+    }
+    /** Runs the add-book flow and the shelf against the server; without this they stay on demo data. */
+    public void connect(LibraryController controller){
+        library=controller;
+        controller.bind(mainPanel,scanPopup,()->{dismissScanConfirmation();navigate(Destination.ARCHIVE);});
     }
 
     private void showNotifications(){

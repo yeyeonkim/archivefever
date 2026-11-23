@@ -11,6 +11,8 @@ public class Main {
         SwingUtilities.invokeLater(() -> {
             JFrame frame = new JFrame("Archive Fever");
             AppShell app=new AppShell();
+            // Uses the server named by -Darchivefever.api, if any; otherwise demo data.
+            archivefever.app.Backend.attachDesktop(app);
             ScaledAppView view = new ScaledAppView(app, 1);
             frame.setContentPane(view);
             frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
