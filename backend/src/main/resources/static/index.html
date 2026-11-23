@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Archive Fever</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #2b211a; }
+  #display { position: fixed; inset: 0; }
+  #status {
+    position: fixed; left: 0; right: 0; top: 40%;
+    text-align: center; color: #efe6d8; font: 16px/1.6 serif;
+    pointer-events: none;
+  }
+  #status.error { color: #ffb4a8; pointer-events: auto; padding: 0 24px; }
+  #timer {
+    position: fixed; right: 8px; top: 8px; z-index: 10;
+    padding: 4px 8px; border-radius: 6px;
+    background: rgba(0, 0, 0, .6); color: #fff; font: 12px monospace;
+  }
+</style>
+<!-- The free CheerpJ licence requires loading the runtime from its CDN. -->
+<script src="https://cjrtnc.leaningtech.com/5.0/loader.js"></script>
+</head>
+<body>
+<div id="display"></div>
+<div id="status">Archive Fever를 불러오는 중…</div>
+<div id="timer" hidden></div>
+<script type="module" src="host.js"></script>
+</body>
+</html>
