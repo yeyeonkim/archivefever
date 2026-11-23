@@ -121,6 +121,10 @@ async function start() {
   try {
     await cheerpjInit({
       version: 17,
+      // Draw at CSS-pixel size and let the browser enlarge it. At a phone's full density
+      // (3x, nine times the pixels) screens took several seconds to finish drawing on a
+      // Galaxy Z Flip4.
+      disableScaling: true,
       javaProperties: [
         // The REST API lives on the same server as this page.
         'archivefever.api=' + location.origin,
