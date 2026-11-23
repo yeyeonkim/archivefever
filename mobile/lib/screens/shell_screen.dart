@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -10,7 +12,6 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../bridge.dart';
 import '../exit_guard.dart';
 import '../page_text.dart';
-import '../passage_service.dart';
 import '../scan_service.dart';
 import '../server.dart';
 import '../settings.dart';
@@ -35,8 +36,10 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
   static const Color _backdrop = Color(0xFF2B211A);
 
   late final ScanService _scans = ScanService(server: widget.server, pending: widget.settings);
-  late final PassageService _passages = PassageService(server: widget.server);
   final TextReader _reader = MlKitTextReader();
+
+  /// Passages handed to the page to save, waiting for its answer, by request number.
+  final Map<int, Completer<bool>> _saving = {};
   final ExitGuard _exitGuard = ExitGuard();
   late final WebViewController _web;
   bool _uploading = false;
@@ -76,8 +79,16 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
           if (target != null && widget.server.owns(target)) return NavigationDecision.navigate;
           // Frames inside the page (the Java runtime loads some) are the page's own business.
           if (!request.isMainFrame) return NavigationDecision.navigate;
+          // Signing in with Kakao has to happen in this web view: the session cookie the
+          // server sets on the way back must land here, not in the phone's browser.
+          if (target != null && _isKakaoSignIn(target)) return NavigationDecision.navigate;
+          // Kakao's page may also try to open the KakaoTalk app (intent: or kakaotalk: links).
+          // That is not wired up; staying put leaves its sign-in form to use.
+          if (target == null || (target.scheme != 'https' && target.scheme != 'http')) {
+            return NavigationDecision.prevent;
+          }
           // Anything else is an outside link and belongs in the browser.
-          if (target != null) _open(target);
+          _open(target);
           return NavigationDecision.prevent;
         },
         onWebResourceError: (error) {
@@ -124,14 +135,26 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
         _capturePage();
       case SavePassageRequest(:final request, :final isbn13):
         _savePassage(request, isbn13);
+      case PassageSaved(:final request, :final saved):
+        _saving.remove(request)?.complete(saved);
       case ScanRequest(:final scanId):
         _scan(scanId);
       case OpenUrlRequest(:final url):
         _open(url);
+      case SignedIn():
       case PageReady():
+        _hideKeyboard();
       case null:
         break;
     }
+  }
+
+  /// The page's sign-in form has gone, or the Swing UI is up, which has no use for the
+  /// keyboard at that moment. A web view field losing focus does not always take the
+  /// keyboard down with it, and it would cover half the screen.
+  void _hideKeyboard() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
   }
 
   // --- Live camera preview ----------------------------------------------------------
@@ -276,9 +299,28 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
       context,
       text: joinLines(picked.map((line) => lines[line].text)),
       page: guessPageNumber(lines),
-      save: (text, page) => _passages.save(isbn13: isbn13, text: text, page: page),
+      save: (text, page) => _saveThroughPage(request, isbn13, text, page),
     );
     if (mounted) _reply(request, saved ? PassageOutcome.saved : PassageOutcome.cancelled);
+  }
+
+  /// Has the page save the passage and waits for its word on how that went. The page does
+  /// it because the page is signed in: the server tells whose passage it is by the session
+  /// cookie, which only requests from the web view carry.
+  Future<bool> _saveThroughPage(int request, String isbn13, String text, int? page) async {
+    final answer = Completer<bool>();
+    _saving[request]?.complete(false);
+    _saving[request] = answer;
+    final passage = jsonEncode({'page': page, 'text': text});
+    try {
+      await _web.runJavaScript('window.hostSavePassage($request, ${jsonEncode(isbn13)}, $passage)');
+      return await answer.future.timeout(const Duration(seconds: 20));
+    } on Exception {
+      // The page is gone, or the server never answered it.
+      return false;
+    } finally {
+      if (_saving[request] == answer) _saving.remove(request);
+    }
   }
 
   void _reply(int request, PassageOutcome outcome) {
@@ -327,6 +369,10 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
       ),
     ));
   }
+
+  /// Whether the address is part of signing in at Kakao (kauth.kakao.com, accounts.kakao.com).
+  static bool _isKakaoSignIn(Uri url) =>
+      url.scheme == 'https' && (url.host == 'kakao.com' || url.host.endsWith('.kakao.com'));
 
   Future<void> _open(Uri url) async {
     final opened = await launchUrl(url, mode: LaunchMode.externalApplication);

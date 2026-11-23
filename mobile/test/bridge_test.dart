@@ -78,6 +78,18 @@ void main() {
       expect(BridgeMessage.parse('{"type":"savePassage","request":3,"isbn13":9788936434120}'), isNull);
     });
 
+    test('reads the page saying whether it saved the passage', () {
+      final saved = BridgeMessage.parse('{"type":"passageSaved","request":3,"saved":true}') as PassageSaved;
+      final refused = BridgeMessage.parse('{"type":"passageSaved","request":4,"saved":false}') as PassageSaved;
+
+      expect((saved.request, saved.saved), (3, true));
+      expect((refused.request, refused.saved), (4, false));
+      expect(BridgeMessage.parse('{"type":"passageSaved","request":3}'), isNull);
+      expect(BridgeMessage.parse('{"type":"passageSaved","request":3,"saved":"yes"}'), isNull);
+      expect(BridgeMessage.parse('{"type":"passageSaved","request":0,"saved":true}'), isNull);
+      expect(BridgeMessage.parse('{"type":"passageSaved","saved":true}'), isNull);
+    });
+
     test('answers the page with the outcome numbers the Swing UI expects', () {
       // The order of archivefever.host.HostBridge.PassageResult.
       expect(PassageOutcome.values.map((outcome) => outcome.name), ['saved', 'nothingPicked', 'cancelled', 'failed']);
@@ -85,6 +97,7 @@ void main() {
 
     test('reads the ready signal', () {
       expect(BridgeMessage.parse('{"type":"ready"}'), isA<PageReady>());
+      expect(BridgeMessage.parse('{"type":"signedIn"}'), isA<SignedIn>());
     });
 
     test('rejects scan ids that could change the request path', () {

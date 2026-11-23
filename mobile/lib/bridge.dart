@@ -44,6 +44,11 @@ sealed class BridgeMessage {
         // The ISBN becomes part of a request path.
         if (isbn13 is! String || !_isbn13.hasMatch(isbn13)) return null;
         return SavePassageRequest(request, isbn13);
+      case 'passageSaved':
+        final request = decoded['request'];
+        final saved = decoded['saved'];
+        if (request is! int || request < 1 || request > _maxRequest || saved is! bool) return null;
+        return PassageSaved(request, saved: saved);
       case 'openUrl':
         final url = decoded['url'];
         final uri = url is String ? Uri.tryParse(url) : null;
@@ -53,6 +58,8 @@ sealed class BridgeMessage {
         return null;
       case 'ready':
         return const PageReady();
+      case 'signedIn':
+        return const SignedIn();
       default:
         return null;
     }
@@ -116,6 +123,15 @@ class SavePassageRequest extends BridgeMessage {
   final String isbn13;
 }
 
+/// The page's answer to `window.hostSavePassage`: whether the server took the passage the
+/// app handed over for the [SavePassageRequest] with this number. The page does the saving
+/// because it holds the reader's session; the app's own requests carry no sign-in.
+class PassageSaved extends BridgeMessage {
+  const PassageSaved(this.request, {required this.saved});
+  final int request;
+  final bool saved;
+}
+
 /// How a [SavePassageRequest] ended, as the number the page is answered with.
 enum PassageOutcome {
   saved,
@@ -132,6 +148,11 @@ enum PassageOutcome {
 class OpenUrlRequest extends BridgeMessage {
   const OpenUrlRequest(this.url);
   final Uri url;
+}
+
+/// Someone has just signed in through the form on the page, which is now gone.
+class SignedIn extends BridgeMessage {
+  const SignedIn();
 }
 
 /// The Swing UI has started.

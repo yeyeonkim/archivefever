@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../passage_service.dart';
+/// The longest text the server keeps as one passage.
+const int maxPassageLength = 2000;
 
 /// Saves the text as a passage; returns whether it was saved.
 typedef PassageSaver = Future<bool> Function(String text, int? page);
@@ -92,7 +93,7 @@ class _PassageDialogState extends State<_PassageDialog> {
             enabled: !_saving,
             minLines: 3,
             maxLines: 7,
-            maxLength: PassageService.maxLength,
+            maxLength: maxPassageLength,
             decoration: const InputDecoration(
               labelText: '문장',
               helperText: '잘못 읽은 글자나 띄어쓰기는 고쳐 주세요.',

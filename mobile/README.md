@@ -6,6 +6,8 @@ Flutter(Android) 앱입니다. 화면 자체는 서버가 내려주는 Swing UI�
 - 책 페이지를 찍어 글자를 읽고(폰 안에서 Google ML Kit 한국어 인식), 고른 줄을 문장으로 저장하기
 - YES24 상품 링크를 브라우저로 열기
 
+로그인은 서버의 웹 페이지가 맡습니다. 앱은 카카오 로그인 페이지를 WebView 안에서 열어 주기만 하고, 로그인 상태(세션 쿠키)는 WebView에 남아 앱을 다시 켜도 유지됩니다.
+
 ## 실행
 
 먼저 노트북에서 서버를 켭니다([backend/README.md](../backend/README.md)).
@@ -35,7 +37,7 @@ APK만 만들려면 `flutter build apk --debug` 를 실행합니다. 결과물�
 2. scan을 누르면 페이지가 `{"type":"capturePage"}` 를 보냅니다. 앱이 사진을 찍어 미리보기 자리에 띄우고 글자를 읽습니다. 사진은 폰 밖으로 나가지 않고, 읽은 뒤 지웁니다.
 3. 인식된 줄마다 테두리가 보입니다. 줄을 누르면 선택(파란색)되고, 끌면 처음 누른 줄부터 손가락 아래 줄까지 한꺼번에 선택됩니다. "다시 찍기"나 뒤로 가기를 누르면 다시 촬영합니다.
 4. save를 누르면 페이지가 `{"type":"savePassage","request":3,"isbn13":"…"}` 를 보냅니다. 앱이 고른 줄을 한 문단으로 이어 붙인 글과, 사진에서 찾은 쪽수를 확인 창에 보여 줍니다. 둘 다 고칠 수 있고, 쪽수를 못 찾았으면 비어 있습니다.
-5. 저장을 누르면 앱이 `POST /api/library/books/{isbn13}/passages` 로 보내고, `window.hostReply(request, 결과)` 로 페이지에 알립니다. 저장되면 Swing 화면이 그 책의 read 화면으로 넘어가 수집한 문장을 쪽수 순으로 보여 줍니다.
+5. 저장을 누르면 앱이 `window.hostSavePassage(request, isbn13, {page, text})` 로 페이지에 넘기고, 페이지가 `POST /api/library/books/{isbn13}/passages` 로 저장합니다. 누구의 문장인지는 세션 쿠키로 알 수 있는데, 그 쿠키는 WebView의 요청에만 붙기 때문입니다. 페이지가 `{"type":"passageSaved","request":3,"saved":true}` 로 결과를 알려 주면 앱이 `window.hostReply(request, 결과)` 로 Swing 화면에 알립니다. 저장되면 Swing 화면이 그 책의 read 화면으로 넘어가 수집한 문장을 쪽수 순으로 보여 줍니다.
 
 줄을 이어 붙일 때 띄어쓰기는 추정입니다. 한국어 책은 낱말 중간에서도 줄이 바뀌어서, 줄 끝 글자가 조사·어미처럼 보이면 띄우고 아니면 붙입니다. 틀린 곳은 확인 창에서 고치면 됩니다.
 
