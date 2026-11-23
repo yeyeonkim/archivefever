@@ -9,6 +9,8 @@ import java.awt.image.BufferedImage;
 /** Shared paper and full-screen scrim used by book, scan, notification and profile popups. */
 public class PaperPopup extends JPanel {
     private static final BufferedImage PAPER=AppTheme.image("images/main/book-popup-paper.png");
+    /** Client property for an action that is finished and now reads as plain black text. */
+    protected static final String SETTLED="paperAction.settled";
     private final Rectangle paperBounds;
 
     protected PaperPopup(Rectangle bounds,Runnable onDismiss) {
@@ -38,11 +40,12 @@ public class PaperPopup extends JPanel {
                 if(fm.stringWidth(getText())>getWidth())font=font.deriveFont(font.getSize2D()*getWidth()/fm.stringWidth(getText()));
                 g.setFont(font);fm=g.getFontMetrics();
                 int baseline=(getHeight()-fm.getHeight())/2+fm.getAscent();
-                g.setColor(isEnabled()?Color.BLACK:new Color(0x666666));
+                boolean settled=Boolean.TRUE.equals(getClientProperty(SETTLED));
+                g.setColor(isEnabled()||settled?Color.BLACK:new Color(0x666666));
                 g.drawString(getText(),0,baseline);
                 g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
                 g.setStroke(new BasicStroke(.65f));
-                g.drawLine(0,baseline+2,Math.min(getWidth()-1,fm.stringWidth(getText())),baseline+2);
+                if(!settled)g.drawLine(0,baseline+2,Math.min(getWidth()-1,fm.stringWidth(getText())),baseline+2);
                 if(hasFocus())g.drawRect(0,0,getWidth()-1,getHeight()-1);
                 g.dispose();
             }

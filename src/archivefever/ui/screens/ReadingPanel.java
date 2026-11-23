@@ -28,8 +28,14 @@ public final class ReadingPanel extends JPanel {
     private boolean resumeMemoFocus;
 
     public ReadingPanel(BookSpine book,Runnable onReturn) {
+        this(book.id(),book.title(),"슬라보예 지젝",Scene.QUOTE,List.of(),"",onReturn);
+    }
+
+    /** Book swap notes reuse this page; a non-empty memoAuthor selects the shared-note layout. */
+    public ReadingPanel(String documentId,String title,String author,String text,
+                        List<String> comments,String memoAuthor,Runnable onReturn) {
         setLayout(new BorderLayout());
-        scene=new Scene(book,onReturn,this);
+        scene=new Scene(documentId,title,author,text,comments,memoAuthor,onReturn,this);
         add(scene,BorderLayout.CENTER);
     }
 
@@ -114,20 +120,22 @@ public final class ReadingPanel extends JPanel {
         private static final BufferedImage OPEN_BOOK=AppTheme.image("images/read/open-book.png");
         private static final BufferedImage EXPANDED_WALL=AppTheme.image("images/read/expanded-wall.png");
         private final ReadingPanel owner;
-        private final String title;
+        private final String title,author;
+        private final boolean sharedNote;
         private static final String QUOTE="즉 타락은 자체로 이미 자기 지양이요, 상처는 자체로 이미 자신의 치유이다. 그러니 타락의 인식은 결국 오인이요, 왜곡된 시각의 효과이다.";
         private final ReadingText readingText;
         private final ReturnButton returnButton;
         private final List<StationeryButton> stationery;
         private double scale=1,offsetX,offsetY;
 
-        Scene(BookSpine book,Runnable onReturn,ReadingPanel owner) {
+        Scene(String documentId,String title,String author,String text,List<String> comments,
+              String memoAuthor,Runnable onReturn,ReadingPanel owner) {
             this.owner=owner;
             setOpaque(true);
             setBackground(Color.WHITE);
             setLayout(new ReadingLayout(this));
-            title=book.title();
-            readingText=new ReadingText(new ReadingDocument(book.id(),QUOTE));
+            this.title=title;this.author=author;sharedNote=!memoAuthor.isEmpty();
+            readingText=new ReadingText(new ReadingDocument(documentId,text),comments,memoAuthor);
             returnButton=new ReturnButton(onReturn);
             stationery=List.of(
                     new StationeryButton("pencil","images/read/pencil.png"),
@@ -188,7 +196,9 @@ public final class ReadingPanel extends JPanel {
                 stationery.get(2).setSceneBounds(16,750,242,367,-26.99,false);
                 stationery.get(3).setSceneBounds(64,766,414.173,414.173,106.36,false);
             }
-            setAt(readingText,expanded?243.58:28,expanded?146:163,335,expanded?600:500);
+            boolean sharedPortrait=sharedNote && !expanded;
+            setAt(readingText,expanded?243.58:sharedPortrait?38:28,expanded?146:sharedPortrait?179:163,335,expanded?600:500);
+            readingText.setInsets(sharedPortrait?6:0,sharedPortrait?3:0);
             readingText.setDisplayScale(scale);
             stationery.forEach(button->button.layoutAt(scale,offsetX,offsetY));
             returnButton.setDisplayScale(scale);
@@ -244,7 +254,7 @@ public final class ReadingPanel extends JPanel {
             g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS,RenderingHints.VALUE_FRACTIONALMETRICS_ON);
             boolean wide=owner.expandedMode;
             drawLine(g,title,(wide?EXPANDED_WIDTH:PORTRAIT_WIDTH)-12,wide?44:50,20,Color.WHITE);
-            drawLine(g,"슬라보예 지젝",(wide?EXPANDED_WIDTH:PORTRAIT_WIDTH)-12,wide?70:76,15,Color.WHITE);
+            if(!author.isEmpty())drawLine(g,author,(wide?EXPANDED_WIDTH:PORTRAIT_WIDTH)-12,wide?70:76,15,Color.WHITE);
         }
         private static void drawLine(Graphics2D g,String text,float right,float y,float size,Color color) {
             Font font=AppFonts.body(size).deriveFont(java.util.Map.of(TextAttribute.TRACKING,-.02f));
