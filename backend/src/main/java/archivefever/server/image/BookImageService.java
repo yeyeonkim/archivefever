@@ -1,6 +1,7 @@
 package archivefever.server.image;
 
 import archivefever.server.book.Book;
+import archivefever.server.book.BookReplaced;
 import archivefever.server.book.BookService;
 import archivefever.server.book.Isbn13;
 import java.awt.Graphics2D;
@@ -24,6 +25,7 @@ import javax.imageio.ImageIO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 /**
@@ -77,7 +79,7 @@ public class BookImageService {
 		if (!Isbn13.isValid(isbn13)) {
 			return Optional.empty();
 		}
-		Path file = directory.resolve(isbn13 + "-" + kind.name().toLowerCase(Locale.ROOT) + ".png");
+		Path file = file(isbn13, kind);
 		try {
 			synchronized (this) {
 				if (Files.exists(file)) {
@@ -98,6 +100,25 @@ public class BookImageService {
 		catch (IOException exception) {
 			throw new UncheckedIOException(exception);
 		}
+	}
+
+	/** Stored pictures were made from the old data; the next request makes them again. */
+	@EventListener
+	void forget(BookReplaced replaced) {
+		synchronized (this) {
+			try {
+				for (Kind kind : Kind.values()) {
+					Files.deleteIfExists(file(replaced.isbn13(), kind));
+				}
+			}
+			catch (IOException exception) {
+				throw new UncheckedIOException(exception);
+			}
+		}
+	}
+
+	private Path file(String isbn13, Kind kind) {
+		return directory.resolve(isbn13 + "-" + kind.name().toLowerCase(Locale.ROOT) + ".png");
 	}
 
 	/** Width in pixels of the book's spine when drawn {@link #SHELF_HEIGHT} tall. */

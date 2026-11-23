@@ -11,6 +11,11 @@ public class StubBookLookup implements BookLookup {
 	public static final String UNKNOWN_ISBN = "9780000000002";
 
 	@Override
+	public String source() {
+		return "stub";
+	}
+
+	@Override
 	public Optional<Book> findByIsbn13(String isbn13) {
 		if (UNKNOWN_ISBN.equals(isbn13)) {
 			return Optional.empty();

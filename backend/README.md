@@ -29,6 +29,10 @@ cd backend
 - 환경변수 `YES24_API_KEY`
 - `backend/application-local.properties` 파일 (git 제외)에 `archivefever.yes24.api-key=발급받은키`
 
+키를 넣거나 바꾼 뒤에는 서버를 다시 시작해야 합니다. 시작 로그에 `Book lookups use the YES24 Open API` 가 나오면 적용된 것입니다.
+
+키 없이 스캔해 "스텁 도서"로 저장된 책은, 키를 넣은 뒤 같은 책을 다시 스캔하면 실제 정보로 바뀝니다. 서재를 통째로 비우려면 서버를 끄고 `data/` 폴더를 지웁니다.
+
 YES24 약관상 도서 정보를 보여 주는 화면에는 출처(YES24)와 상품 페이지 링크가 있어야 합니다.
 
 ## 데스크톱 Swing을 서버에 붙이기

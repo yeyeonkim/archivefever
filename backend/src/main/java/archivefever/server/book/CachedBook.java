@@ -43,10 +43,15 @@ class CachedBook {
 
 	private Instant fetchedAt;
 
+	/** Which {@link BookLookup} produced this row. Null on rows written before sources were recorded. */
+	@Column(length = 16)
+	private String source;
+
 	protected CachedBook() {
 	}
 
-	CachedBook(Book book, Instant fetchedAt) {
+	CachedBook(Book book, String source, Instant fetchedAt) {
+		this.source = source;
 		this.isbn13 = book.isbn13();
 		this.itemId = book.itemId();
 		this.title = book.title();
@@ -57,6 +62,10 @@ class CachedBook {
 		this.spineImageUrl = book.spineImageUrl();
 		this.pages = book.pages();
 		this.fetchedAt = fetchedAt;
+	}
+
+	String source() {
+		return source;
 	}
 
 	Book toBook() {

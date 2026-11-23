@@ -11,6 +11,12 @@ public interface BookLookup {
 	 */
 	Optional<Book> findByIsbn13(String isbn13);
 
+	/**
+	 * Short name of where the answers come from. Stored with cached books so that data from
+	 * one source (the stub, say) is not served once another source is configured.
+	 */
+	String source();
+
 	/** Why a lookup could not be completed, as reported to the client. */
 	enum Failure {
 		/** The API key is missing or rejected; someone has to fix the server configuration. */

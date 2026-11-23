@@ -34,6 +34,11 @@ public class Yes24BookLookup implements BookLookup {
 	}
 
 	@Override
+	public String source() {
+		return "yes24";
+	}
+
+	@Override
 	public Optional<Book> findByIsbn13(String isbn13) {
 		ResponseEntity<Envelope> response = request(isbn13);
 		if (response.getStatusCode().value() == 429) {

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
@@ -17,46 +19,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Exercises the client against a local HTTP server that answers in the shape documented at
- * https://developers.yes24.com/api-doc/goods-item-detail. The success body is hand-written
- * from that documentation; replace it with a saved real answer once an API key is available.
+ * Exercises the client against a local HTTP server that answers as the YES24 Open API does
+ * (https://developers.yes24.com/api-doc/goods-item-detail).
  */
 class Yes24BookLookupTests {
 
 	private static final String ISBN = "9788936434120";
 
-	private static final String FOUND = """
-			{
-			  "success": true,
-			  "message": null,
-			  "errorCode": null,
-			  "data": {
-			    "meta": {"apiTitle": "상품 상세", "version": "v1", "query": "9788936434120"},
-			    "currentPage": 1,
-			    "pageSize": 1,
-			    "totalCount": 1,
-			    "items": [
-			      {
-			        "itemId": 13137546,
-			        "title": "소년이 온다",
-			        "subTitle": "한강 장편소설",
-			        "author": "한강",
-			        "publisher": "창비",
-			        "isbn10": "8936434128",
-			        "isbn13": "9788936434120",
-			        "publishDate": "2014-05-19",
-			        "cover": "https://image.yes24.com/goods/13137546/L",
-			        "sideCover": "https://image.yes24.com/goods/13137546/SIDE/L",
-			        "backCover": "https://image.yes24.com/goods/13137546/BACK/L",
-			        "link": "https://www.yes24.com/Product/Goods/13137546",
-			        "mobileLink": "https://m.yes24.com/Goods/Detail/13137546",
-			        "pages": 216,
-			        "contentDetail": {"bookIntroduction": null}
-			      }
-			    ]
-			  }
-			}
-			""";
+	/** A real answer for this ISBN, saved from the API with the publisher's descriptive text removed. */
+	private static final String FOUND = fixture("/yes24/item-detail.json");
 
 	private record Answer(int status, String body) {
 	}
@@ -99,8 +70,8 @@ class Yes24BookLookupTests {
 
 		Optional<Book> book = lookup.findByIsbn13(ISBN);
 
-		assertThat(book).hasValue(new Book(ISBN, 13137546L, "소년이 온다", "한강", "창비",
-				"https://www.yes24.com/Product/Goods/13137546", "https://image.yes24.com/goods/13137546/L",
+		assertThat(book).hasValue(new Book(ISBN, 13137546L, "소년이 온다", "한강 저", "창비",
+				"https://www.yes24.com/product/goods/13137546", "https://image.yes24.com/goods/13137546/L",
 				"https://image.yes24.com/goods/13137546/SIDE/L", 216));
 		assertThat(requests).containsExactly("/v1/goods/itemDetail?searchType=ISBN13&query=" + ISBN + "&detail=Y");
 		assertThat(keys).containsExactly("test-key");
@@ -158,6 +129,15 @@ class Yes24BookLookupTests {
 		assertThatThrownBy(() -> lookup.findByIsbn13(ISBN))
 				.isInstanceOfSatisfying(BookLookup.LookupException.class,
 						exception -> assertThat(exception.failure()).isEqualTo(BookLookup.Failure.LOOKUP_UNAVAILABLE));
+	}
+
+	private static String fixture(String path) {
+		try (InputStream in = Yes24BookLookupTests.class.getResourceAsStream(path)) {
+			return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+		}
+		catch (IOException exception) {
+			throw new UncheckedIOException(exception);
+		}
 	}
 
 	private static String error(String code, String message) {

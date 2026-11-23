@@ -1,0 +1,69 @@
+{
+  "success": true,
+  "message": "성공",
+  "data": {
+    "meta": {
+      "apiTitle": "상품 상세 조회",
+      "apiLink": "https://apis.yes24.com/v1/goods/itemDetail?searchType=ISBN13&query=9788936434120&detail=Y",
+      "logoUrl": "https://image.yes24.com/sysimage/apis/openapi/images/logoN4.svg",
+      "pubDate": "2026-11-23T15:51:16+09:00",
+      "query": "?searchType=ISBN13&query=9788936434120&detail=Y",
+      "version": "v1"
+    },
+    "items": [
+      {
+        "sortOrder": 1,
+        "itemId": 13137546,
+        "title": "소년이 온다",
+        "subTitle": "",
+        "author": "한강 저",
+        "goodsType": "도서",
+        "goodsSortNm": "국내도서-소설/시/희곡",
+        "adultYn": "N",
+        "publisher": "창비",
+        "isbn10": "8936434128",
+        "isbn13": "9788936434120",
+        "shopPrice": 15000.0,
+        "salePrice": 13500.0,
+        "publishDate": "20140519",
+        "itemStatus": "판매중",
+        "yesPoint": 750,
+        "salePoint": 205932,
+        "fixedBookPriceYn": "Y",
+        "originalTitle": "Human Acts",
+        "originalTranslation": "번역서",
+        "pages": 216,
+        "weight": 301,
+        "width": 153,
+        "length": 224,
+        "height": 20,
+        "itemFormat": null,
+        "starScore": 9.7,
+        "cover": "https://image.yes24.com/goods/13137546/L",
+        "sideCover": "https://image.yes24.com/goods/13137546/SIDE/L",
+        "backCover": "https://image.yes24.com/goods/13137546/BACK/L",
+        "link": "https://www.yes24.com/product/goods/13137546",
+        "addOnLink": "",
+        "mobileLink": "https://m.yes24.com/goods/detail/13137546",
+        "upDown": null,
+        "ebookId": 176969335,
+        "eBookLink": "https://www.yes24.com/product/goods/176969335",
+        "contentDetail": {
+          "bookIntroduction": "(생략)",
+          "bookSummary": null,
+          "tableOfContents": "(생략)"
+        },
+        "series": [
+          {
+            "seriesId": 348341,
+            "seriesName": "2024 노벨문학상 수상작가 "
+          }
+        ]
+      }
+    ],
+    "currentPage": 1,
+    "pageSize": 1,
+    "totalCount": 1
+  },
+  "errorCode": null
+}
