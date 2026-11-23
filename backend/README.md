@@ -4,7 +4,7 @@ Spring Boot 서버입니다. 세 가지 일을 합니다.
 
 - REST API: 도서 스캔(바코드 사진 → ISBN → YES24 조회), 내 서재, 책 이미지
 - Swing 화면을 브라우저에서 실행하는 페이지 서빙 (CheerpJ 사용)
-- H2 파일 DB에 서재 저장 (`data/` 폴더, git 제외)
+- 서재·스캔 기록·수집한 문장을 DB에 저장 (MySQL 권장, 설정이 없으면 H2 파일 DB)
 
 ## 실행
 
@@ -31,7 +31,7 @@ cd backend
 
 키를 넣거나 바꾼 뒤에는 서버를 다시 시작해야 합니다. 시작 로그에 `Book lookups use the YES24 Open API` 가 나오면 적용된 것입니다.
 
-키 없이 스캔해 "스텁 도서"로 저장된 책은, 키를 넣은 뒤 같은 책을 다시 스캔하면 실제 정보로 바뀝니다. 서재를 통째로 비우려면 서버를 끄고 `data/` 폴더를 지웁니다.
+키 없이 스캔해 "스텁 도서"로 저장된 책은, 키를 넣은 뒤 같은 책을 다시 스캔하면 실제 정보로 바뀝니다.
 
 YES24 약관상 도서 정보를 보여 주는 화면에는 출처(YES24)와 상품 페이지 링크가 있어야 합니다.
 
@@ -66,6 +66,44 @@ IntelliJ에서 `Main`을 실행할 때 VM 옵션에 서버 주소를 주면, 책
 수집한 문장은 글자만 저장합니다. 페이지 사진은 폰에서 글자를 읽는 데만 쓰이고 서버로 오지 않습니다.
 
 아직 로그인이 없어서 모든 요청은 데모 사용자 한 명의 것으로 처리됩니다.
+
+## 데이터베이스
+
+서재, 스캔 기록, 수집한 문장이 DB에 저장됩니다. 서버를 껐다 켜도, 노트북을 재부팅해도 남습니다. 테이블은 서버가 처음 뜰 때 자동으로 만들어집니다.
+
+### MySQL (권장)
+
+MySQL 8을 설치한 뒤 DB와 계정을 한 번 만듭니다(Workbench 등에서 실행).
+
+```sql
+CREATE DATABASE archivefever CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'archivefever'@'localhost' IDENTIFIED BY '원하는비밀번호';
+GRANT ALL PRIVILEGES ON archivefever.* TO 'archivefever'@'localhost';
+```
+
+`backend/application-local.properties`(git 제외, YES24 키를 넣는 그 파일)에 접속 정보를 적습니다.
+
+```properties
+spring.datasource.url=jdbc:mysql://localhost:3306/archivefever?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+spring.datasource.username=archivefever
+spring.datasource.password=원하는비밀번호
+```
+
+서버를 다시 시작하면 시작 로그에 `Database driver: MySQL Connector/J` 가 나옵니다. 서재를 통째로 비우려면 서버를 끄고 `DROP DATABASE archivefever;` 후 위의 `CREATE DATABASE`를 다시 실행합니다.
+
+### H2 파일 (설정이 없을 때)
+
+위 세 줄이 없으면 설치가 필요 없는 H2 파일 DB(`backend/data/archivefever.mv.db`)를 씁니다. 바로 실행해 볼 수 있지만, 잃으면 안 되는 데이터에는 권하지 않습니다. 서버가 정상 종료되지 않고 죽었을 때 10분 전에 저장한 문장이 사라진 적이 있습니다. 그 뒤로 DB 주소에 `REUSE_SPACE=FALSE`를 넣어 두었으니 지우지 마세요. 서재를 비우려면 서버를 끄고 `data/` 폴더를 지웁니다.
+
+두 DB의 데이터는 서로 옮겨지지 않습니다. DB를 바꾸면 빈 서재로 시작합니다.
+
+### DB에 들어가지 않는 것
+
+- 표지·책등 이미지(`data/images`)와 올린 바코드 사진(`data/uploads`)은 어느 DB를 쓰든 `backend/data/` 폴더에 있습니다. 이 폴더는 git에 올라가지 않습니다.
+- 밑줄·형광펜·메모는 아직 서버로 가지 않습니다. 폰에서는 앱(WebView) 저장소에, 데스크톱에서는 `~/.archivefever/notes`에 남으므로 앱 데이터를 지우면 사라집니다.
+- DB는 서버를 실행하는 PC마다 따로입니다. 다른 PC에서 서버를 켜면 빈 서재로 시작합니다.
+
+자동 테스트(`gradlew test`)는 어떤 설정이 있든 메모리 안의 H2만 씁니다.
 
 ## 테스트
 

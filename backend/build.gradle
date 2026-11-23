@@ -22,7 +22,10 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	// Barcode decoding for uploaded back-cover photos.
 	implementation 'com.google.zxing:core:3.5.3'
+	// H2 needs no setup and is the default; MySQL is used when application-local.properties
+	// points the datasource at one (see README).
 	runtimeOnly 'com.h2database:h2'
+	runtimeOnly 'com.mysql:mysql-connector-j'
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -30,6 +33,11 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// Tests create and drop their tables. System properties outrank every properties file,
+	// so whatever database application-local.properties names, tests get one in memory.
+	systemProperty 'spring.datasource.url', 'jdbc:h2:mem:test;DB_CLOSE_DELAY=-1'
+	systemProperty 'spring.datasource.username', 'sa'
+	systemProperty 'spring.datasource.password', ''
 }
 
 // ---------------------------------------------------------------------------
