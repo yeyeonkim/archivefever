@@ -40,6 +40,8 @@ public final class AppShell extends JPanel {
     private boolean embedded;
     private final MainPanel mainPanel;
     private LibraryController library;
+    /** The book whose collected passages are being loaded for the reading screen, if any. */
+    private BookSpine readingRequest;
     private JFrame readingFrame;
     private Container mainContentPane;
     private Dimension mainWindowSize;
@@ -75,7 +77,7 @@ public final class AppShell extends JPanel {
         content.add(menuPanel,Destination.MENU.name());
         addBookPanel=new AddBookPanel(this::scanBook);
         content.add(addBookPanel,Destination.ADD_BOOK.name());
-        sentenceScanPanel=new SentenceScanPanel(this::captureSentence,()->navigate(Destination.ARCHIVE));
+        sentenceScanPanel=new SentenceScanPanel(this::captureSentence,this::leaveSentenceScan);
         content.add(sentenceScanPanel,"sentence-scan");
         friendPanel=new FriendPanel(demoSocial,choicePopup,this::showRequestedSwap);
         content.add(friendPanel,Destination.FRIEND.name());
@@ -110,7 +112,7 @@ public final class AppShell extends JPanel {
     public void navigate(Destination destination) {
         if(!loggedIn) return;
         dismissMenuPopups();dismissScanConfirmation();selectionPopup.setVisible(false);menuPanel.resetHover();
-        sentenceScanPanel.reset();
+        sentenceScanPanel.reset();readingRequest=null;
         currentDestination=destination;
         screens.show(content,destination.name());
         if(destination==Destination.FRIEND)friendPanel.reload();
@@ -122,7 +124,7 @@ public final class AppShell extends JPanel {
 
     private void openSentenceScan(BookSpine book){
         if(!loggedIn || currentDestination!=Destination.ARCHIVE)return;
-        dismissMenuPopups();dismissScanConfirmation();selectionPopup.setVisible(false);
+        dismissMenuPopups();dismissScanConfirmation();selectionPopup.setVisible(false);readingRequest=null;
         sentenceScanPanel.setBook(book);
         screens.show(content,"sentence-scan");
         navigation.setDestination(Destination.ARCHIVE);navigation.setSentenceCaptureLayout(true);navigation.setVisible(true);
@@ -130,10 +132,21 @@ public final class AppShell extends JPanel {
         if(library!=null)library.cameraScreen(true);
     }
     private void captureSentence(){
-        if(!loggedIn || sentenceScanPanel.selectedBook()==null || sentenceScanPanel.isCaptured())return;
-        if(library!=null)library.pageCaptured();
+        if(!loggedIn || sentenceScanPanel.selectedBook()==null)return;
+        // The same button: "scan." photographs the page, then as "save." it saves the picked lines.
+        if(sentenceScanPanel.isCaptured()){if(library!=null)library.savePassage();return;}
         shutterSound.run();sentenceScanPanel.showCaptured();repaint();
+        if(library!=null)library.pageCaptured();
     }
+    /** Back on the sentence screen: from a page under review to the camera for another photo, otherwise to the shelf. */
+    private void leaveSentenceScan(){
+        BookSpine book=sentenceScanPanel.selectedBook();
+        if(library==null || book==null || !sentenceScanPanel.isCaptured()){navigate(Destination.ARCHIVE);return;}
+        sentenceScanPanel.setBook(book);repaint();
+        library.cameraScreen(true);
+    }
+    /** A collected passage has been saved: the book's reading page shows it among the others. */
+    private void showCollected(BookSpine book){navigate(Destination.ARCHIVE);openReading(book);}
 
     private void scanBook(){
         if(!loggedIn || currentDestination!=Destination.ADD_BOOK || scanPopup.isVisible())return;
@@ -152,6 +165,7 @@ public final class AppShell extends JPanel {
     public void connect(LibraryController controller){
         library=controller;
         controller.bind(mainPanel,scanPopup,()->{dismissScanConfirmation();navigate(Destination.ARCHIVE);});
+        controller.bindSentences(sentenceScanPanel,this::showCollected);
     }
 
     private void showNotifications(){
@@ -179,7 +193,7 @@ public final class AppShell extends JPanel {
     public DemoSocial demoSocial(){return demoSocial;}
     private void logout(){
         dismissMenuPopups();dismissScanConfirmation();selectionPopup.setVisible(false);menuPanel.resetHover();
-        sentenceScanPanel.reset();
+        sentenceScanPanel.reset();readingRequest=null;
         friendPanel.reset();bookSwapPanel.reset();
         if(library!=null)library.cameraScreen(false);
         notificationPopup.resetSession();loggedIn=false;currentDestination=null;
@@ -296,7 +310,17 @@ public final class AppShell extends JPanel {
     }
 
     private void openReading(BookSpine book) {
-        showReading(new ReadingPanel(book,this::returnToArchive));
+        if(library==null){showReading(new ReadingPanel(book,this::returnToArchive));return;}
+        // Connected: the page shows the passages the reader has collected from this book.
+        readingRequest=book;
+        library.loadReading(book,reading->{
+            if(readingRequest!=book)return;
+            readingRequest=null;
+            ReadingPanel panel=new ReadingPanel(book.id(),book.title(),reading.author(),reading.text(),
+                    java.util.List.of(),"",this::returnToArchive);
+            panel.readingText().setPlaceholder(reading.notice());
+            showReading(panel);
+        });
     }
 
     private void showReading(ReadingPanel panel) {
@@ -337,6 +361,7 @@ public final class AppShell extends JPanel {
     }
 
     private void dismissBookSelection() {
+        readingRequest=null;
         selectionPopup.setVisible(false);
         repaint();
     }

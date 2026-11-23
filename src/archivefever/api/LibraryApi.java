@@ -23,6 +23,9 @@ public final class LibraryApi {
     /** @param spineWidth width in pixels of the spine at the shelf's 172 pixel spine height */
     public record ShelfBook(String isbn13,String title,String author,String link,String spineUrl,int spineWidth) {}
 
+    /** Text collected from a page of a book. @param page null when the reader left it out */
+    public record Passage(Integer page,String text) {}
+
     private final ApiClient client;
 
     public LibraryApi(ApiClient client) {this.client=client;}
@@ -47,6 +50,18 @@ public final class LibraryApi {
         return books;
     }
 
+    /** The passages collected from a shelf book, in reading order (by page). */
+    public List<Passage> passages(String isbn13) throws IOException {
+        List<Passage> passages=new ArrayList<>();
+        for(Object entry:Json.list(client.get("/api/library/books/"+isbn13+"/passages")))passages.add(passage(entry));
+        return passages;
+    }
+
+    public Passage addPassage(String isbn13,Integer page,String text) throws IOException {
+        return passage(client.post("/api/library/books/"+isbn13+"/passages",
+                "{\"page\":"+page+",\"text\":"+Json.quote(text)+"}"));
+    }
+
     /** @param path a cover or spine address from one of the answers above */
     public BufferedImage image(String path) throws IOException {
         BufferedImage image=ImageIO.read(new ByteArrayInputStream(client.getBytes(path)));
@@ -60,6 +75,10 @@ public final class LibraryApi {
                 book==null?null:new BookInfo(Json.string(book,"isbn13"),Json.string(book,"title"),
                         Json.string(book,"author"),Json.string(book,"publisher"),Json.string(book,"link"),
                         Json.string(book,"coverUrl"),Json.string(book,"spineUrl")));
+    }
+
+    private static Passage passage(Object json) {
+        return new Passage(Json.field(json,"page") instanceof Number page?page.intValue():null,Json.string(json,"text"));
     }
 
     private static ShelfBook shelfBook(Object json) {

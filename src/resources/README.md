@@ -151,6 +151,21 @@ change it together with the camera artwork.
 AppShell tells the host when a camera screen comes into view or is left, and when its
 scan button is pressed (HostBridge.showCamera / hideCamera / capturePhoto), so the photo
 is taken at the press. On Add book the photo is then uploaded to the server's scan and the
-confirmation popup shows the book. On Archive sentence the picture simply stays on the
-display with the save state: recognition and saving are still for the OCR owner to add.
-On the desktop none of this happens and both screens behave as described above.
+confirmation popup shows the book.
+
+On Archive sentence the scan button asks the host for a page photo (HostBridge.capturePage).
+The phone app reads the text on it, on the phone, and lets the reader pick lines on the
+picture. The same button, now "save.", asks the host to save them (HostBridge.savePassage):
+the app shows the picked text and the page number it found for correction, sends them to
+the server, and answers with a PassageResult. Once saved, AppShell opens the book's reading
+page. Back (Escape) on a captured page returns to the camera for another photo.
+
+Connected to the server, the reading page of a shelf book shows the passages collected
+from it in page order, a paragraph each, with a "p.127" line wherever the page changes
+(LibraryController.readingText). ReadingDocument ends a sentence at every line break, so
+each passage and page note is marked on its own, and when the text grows the saved marks
+follow their sentences to their new places. ReadingText scrolls by drag or wheel once the
+text is longer than the page.
+
+On the desktop there is no camera: without a server both screens behave as described
+above, and with one (-Darchivefever.api) save opens a dialog to type the passage in.

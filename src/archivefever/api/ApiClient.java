@@ -33,6 +33,16 @@ public final class ApiClient {
         return Json.parse(text(read(connection)));
     }
 
+    public Object post(String path,String json) throws IOException {
+        byte[] body=json.getBytes(StandardCharsets.UTF_8);
+        HttpURLConnection connection=open(path,"POST");
+        connection.setDoOutput(true);
+        connection.setRequestProperty("Content-Type","application/json");
+        connection.setFixedLengthStreamingMode(body.length);
+        try(OutputStream out=connection.getOutputStream()) {out.write(body);}
+        return Json.parse(text(read(connection)));
+    }
+
     public Object postFile(String path,String field,String filename,byte[] content) throws IOException {
         String boundary="----archivefever"+Long.toHexString(System.nanoTime());
         ByteArrayOutputStream body=new ByteArrayOutputStream();

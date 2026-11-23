@@ -8,23 +8,36 @@ import archivefever.ui.components.ScanConfirmationPopup;
 import archivefever.ui.components.ScanResultView;
 import archivefever.ui.screens.CameraScanPanel;
 import archivefever.ui.screens.MainPanel;
+import archivefever.ui.screens.SentenceScanPanel;
 import archivefever.ui.theme.AppColors;
 import archivefever.ui.theme.AppFonts;
 import javax.swing.*;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
 /**
  * Runs book registration against the server: the scan button creates a scan, the host
  * (phone or desktop) uploads a barcode photo to it, and this class waits for the outcome,
- * shows the book for confirmation and puts it on the shelf. Used on the event thread only.
+ * shows the book for confirmation and puts it on the shelf. It also has the host save the
+ * sentences collected from a page photo, and loads them for the reading screen.
+ * Used on the event thread only.
  */
 public final class LibraryController {
+    /**
+     * What the reading screen shows for a shelf book.
+     * @param text the passages collected from the book, in page order
+     * @param notice shown in place of the text when there is none
+     */
+    public record Reading(String author,String text,String notice) {}
+
     private static final String YES24="https://www.yes24.com/";
+    private static final String PICK_HINT="저장할 줄을 고른 뒤 눌러 주세요";
     private static final int POLL_MILLIS=800, FAILURES_BEFORE_GIVING_UP=5;
     private final LibraryApi api;
     private final HostBridge host;
@@ -40,6 +53,12 @@ public final class LibraryController {
     private int scanGeneration;
     /** Bumped for every shelf update, so only the newest one is shown. */
     private int shelfGeneration;
+    private SentenceScanPanel sentences;
+    private Consumer<BookSpine> onPassageSaved;
+    /** Bumped when a camera screen is entered or left, so a late answer to a save is ignored. */
+    private int passageGeneration;
+    /** Authors of the shelf books by ISBN; filled while the shelf loads off the event thread. */
+    private final Map<String,String> authors=new ConcurrentHashMap<>();
 
     public LibraryController(LibraryApi api,HostBridge host) {this.api=api;this.host=host;}
 
@@ -54,6 +73,11 @@ public final class LibraryController {
         shelf.add(credit,0);
     }
 
+    /** @param onSaved run with the book once a passage collected from it has been saved */
+    public void bindSentences(SentenceScanPanel panel,Consumer<BookSpine> onSaved) {
+        sentences=panel;onPassageSaved=onSaved;
+    }
+
     /** Replaces the shelf with the user's books from the server. */
     public void reloadShelf() {
         int load=++shelfGeneration;
@@ -65,6 +89,7 @@ public final class LibraryController {
      * into view, or when the UI leaves it. Both screens draw the same camera.
      */
     public void cameraScreen(boolean showing) {
+        passageGeneration++;
         java.awt.Rectangle display=CameraScanPanel.DISPLAY;
         if(showing)host.showCamera(display.x,display.y,display.width,display.height,CameraScanPanel.DISPLAY_CORNER);
         else host.hideCamera();
@@ -72,10 +97,55 @@ public final class LibraryController {
 
     /**
      * Called when the sentence-capture screen's scan button is pressed: the host takes the
-     * page photo now and keeps the picture on its preview. Nothing is uploaded yet; text
-     * recognition and saving sentences are not built.
+     * page photo now, reads its text and lets the reader pick lines on the picture.
      */
-    public void pageCaptured() {host.capturePhoto();}
+    public void pageCaptured() {
+        host.capturePage();
+        sentences.setSaveAvailable(true,PICK_HINT);
+    }
+
+    /** Called when the sentence-capture screen's save button is pressed. */
+    public void savePassage() {
+        BookSpine book=sentences.selectedBook();
+        if(book==null)return;
+        int attempt=++passageGeneration;
+        sentences.setSaveAvailable(false,"저장하는 중이에요");
+        host.savePassage(book.id(),outcome->{
+            if(attempt!=passageGeneration)return;
+            switch(outcome) {
+                case SAVED->onPassageSaved.accept(book);
+                case NOTHING_PICKED->sentences.setSaveAvailable(true,"저장할 줄을 먼저 골라 주세요");
+                case CANCELLED->sentences.setSaveAvailable(true,PICK_HINT);
+                case FAILED->sentences.setSaveAvailable(true,"저장하지 못했어요. 다시 눌러 주세요");
+                case UNAVAILABLE->sentences.setSaveAvailable(false,"이 기기에서는 문장을 저장할 수 없어요");
+            }
+        });
+    }
+
+    /** Loads what the reading screen shows for a shelf book; {@code ready} always gets an answer. */
+    public void loadReading(BookSpine book,Consumer<Reading> ready) {
+        String author=authors.getOrDefault(book.id(),"");
+        background(()->readingText(api.passages(book.id())),
+                text->ready.accept(new Reading(author,text,"아직 수집한 문장이 없어요.\n책장에서 책을 누르고 scan으로 문장을 모아 보세요.")),
+                error->ready.accept(new Reading(author,"","수집한 문장을 불러오지 못했어요.")));
+    }
+
+    /**
+     * The passages as one text, a paragraph each, with the page noted wherever it changes.
+     * @param passages in reading order, those without a page last
+     */
+    public static String readingText(List<LibraryApi.Passage> passages) {
+        StringBuilder text=new StringBuilder();
+        Integer page=null;
+        for(LibraryApi.Passage passage:passages) {
+            if(text.length()>0)text.append("\n\n");
+            if(passage.page()!=null && !passage.page().equals(page))text.append("p.").append(passage.page()).append('\n');
+            else if(passage.page()==null && page!=null)text.append("p.—\n");
+            page=passage.page();
+            text.append(passage.text());
+        }
+        return text.toString();
+    }
 
     /** Called when the confirmation popup has just opened for a new scan. */
     public void scanStarted() {
@@ -174,9 +244,11 @@ public final class LibraryController {
 
     private List<BookSpine> loadShelf() throws Exception {
         List<BookSpine> spines=new ArrayList<>();
-        for(LibraryApi.ShelfBook book:api.library())
+        for(LibraryApi.ShelfBook book:api.library()) {
+            authors.put(book.isbn13(),book.author()==null?"":book.author());
             spines.add(new BookSpine(book.isbn13(),book.title(),api.image(book.spineUrl()),
                     Math.max(1,Math.min(355,book.spineWidth()))));
+        }
         return spines;
     }
 

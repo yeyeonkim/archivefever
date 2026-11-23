@@ -28,8 +28,13 @@ function fail(message, error) {
 //   {"type":"scan","scanId":"..."}   take a barcode photo and upload it to that scan
 //   {"type":"openUrl","url":"..."}   open a page outside the app
 //   {"type":"ready"}                 the UI is on screen
+//   {"type":"camera",...}, {"type":"capture"}, {"type":"capturePage"}
+//                                    live camera preview, and photos taken on it
+//   {"type":"savePassage","request":3,"isbn13":"..."}
+//                                    save the text the reader picked on the page photo;
+//                                    answered through window.hostReply (below)
 // Inside the Flutter app a JavaScript channel named "Bridge" receives them. In a plain
-// browser (development on a laptop) the page does the same jobs itself.
+// browser (development on a laptop) the page does the same jobs itself, as far as it can.
 
 function fromSwing(json) {
   let message;
@@ -50,6 +55,32 @@ function fromSwing(json) {
     pickPhotoInBrowser(message.scanId);
   } else if (message.type === 'openUrl') {
     window.open(message.url, '_blank', 'noopener');
+  } else if (message.type === 'savePassage') {
+    typePassageInBrowser(message.isbn13).then((outcome) => window.hostReply(message.request, outcome));
+  }
+}
+
+// How a savePassage request ended; the numbers are the order of HostBridge.PassageResult.
+const SAVED = 0, NOTHING_PICKED = 1, CANCELLED = 2, FAILED = 3;
+
+// A plain browser has no camera preview to pick lines on: the passage is typed in.
+async function typePassageInBrowser(isbn13) {
+  const text = window.prompt('수집할 문장을 입력하세요');
+  if (text === null) return CANCELLED;
+  if (text.trim() === '') return NOTHING_PICKED;
+  const page = window.prompt('쪽수 (모르면 비워 두세요)', '');
+  if (page === null) return CANCELLED;
+  if (page.trim() !== '' && !/^\d{1,4}$/.test(page.trim())) return FAILED;
+  try {
+    const response = await fetch('/api/library/books/' + encodeURIComponent(isbn13) + '/passages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page: page.trim() === '' ? null : Number(page.trim()), text }),
+    });
+    return response.ok ? SAVED : FAILED;
+  } catch (error) {
+    console.error('[host] saving the passage failed', error);
+    return FAILED;
   }
 }
 
@@ -89,6 +120,26 @@ window.hostBack = function () {
     }));
   }
 };
+
+// The answer to a request that expects one (savePassage): its request number and how it
+// ended. A Java thread waits for answers in WebHost.awaitReply; they queue here until it
+// collects them.
+const replies = [];
+let wakeJava = null;
+window.hostReply = function (request, outcome) {
+  replies.push(request * 16 + outcome);
+  if (wakeJava) {
+    wakeJava();
+    wakeJava = null;
+  }
+};
+
+async function nextReply() {
+  while (replies.length === 0) {
+    await new Promise((resolve) => { wakeJava = resolve; });
+  }
+  return replies.shift();
+}
 
 // --- Start-up -------------------------------------------------------------------------
 
@@ -136,6 +187,10 @@ async function start() {
         // private static native void post(String json) in archivefever.host.WebHost
         async Java_archivefever_host_WebHost_post(lib, json) {
           fromSwing(json);
+        },
+        // private static native int awaitReply(): only the Java thread calling it waits.
+        async Java_archivefever_host_WebHost_awaitReply(lib) {
+          return nextReply();
         },
       },
     });
