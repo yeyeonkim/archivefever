@@ -69,6 +69,14 @@ public final class WebHost implements HostBridge {
         post("{\"type\":\"savePassage\",\"request\":"+request+",\"isbn13\":"+Json.quote(isbn13)+"}");
     }
 
+    /**
+     * In the browser the page signs people in before it starts this UI, so the UI's own
+     * login screen is only reached after signing out. Both ways lead back to the page's.
+     */
+    @Override public void signIn(Consumer<String> done) {signOut();}
+
+    @Override public void signOut() {post("{\"type\":\"signOut\"}");}
+
     @Override public void openUrl(String url) {
         post("{\"type\":\"openUrl\",\"url\":"+Json.quote(url)+"}");
     }

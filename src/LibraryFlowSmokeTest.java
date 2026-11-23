@@ -167,6 +167,13 @@ public class LibraryFlowSmokeTest {
         return count;
     }
     private static String lastHostEvent() {return hostEvents.isEmpty()?"":hostEvents.get(hostEvents.size()-1);}
+    /** The name shown in the profile popup, which need not be open. */
+    private static String profileName() {
+        for(Component child:find(app,archivefever.ui.components.ProfilePopup.class).getComponents())
+            if(child instanceof JLabel label && "로그인한 사용자".equals(label.getAccessibleContext().getAccessibleName()))
+                return label.getText();
+        return null;
+    }
     private static String statusText() {
         return named(app,"도서 조회 상태") instanceof JLabel label?label.getText():null;
     }
@@ -290,6 +297,8 @@ public class LibraryFlowSmokeTest {
                 if(outcome==PassageResult.SAVED)passages.add("{\"id\":1,\"page\":12,\"text\":\"모은 문장.\"}");
                 Timer answer=new Timer(30,e->done.accept(outcome));answer.setRepeats(false);answer.start();
             }
+            @Override public void signIn(Consumer<String> done) {hostEvents.add("signIn");done.accept("mina");}
+            @Override public void signOut() {hostEvents.add("signOut");}
             @Override public void openUrl(String url) {openedUrls.add(url);}
         };
         edt(()->{
@@ -298,11 +307,15 @@ public class LibraryFlowSmokeTest {
             app.setSize(412,917);app.doLayout();
             require(find(app,Bookshelf.class).getComponentCount()>0,"Demo books before connecting");
             LibraryController library=new LibraryController(new LibraryApi(new ApiClient(address)),host);
-            app.connect(library);library.reloadShelf();
+            app.connect(library);
+            require(find(app,Bookshelf.class).getComponentCount()>0 && hostEvents.isEmpty(),"Nothing is asked of the server before signing in");
             ((JButton)named(app,"카카오 로그인")).doClick(0);
             return true;
         });
+        require(hostEvents.get(0).equals("signIn"),"The login button signs in through the host: "+hostEvents);
         waitFor("server shelf replaces demo books",()->find(app,Bookshelf.class).getComponentCount()==0);
+        require(edt(()->app.currentDestination()==Destination.ARCHIVE && "mina".equals(profileName())),
+                "Signed in as the person the host named");
         require(edt(()->named(app,"도서 정보 출처 YES24")!=null),"Shelf credits YES24");
         require(lastHostEvent().equals("hide"),"No camera preview away from the camera screen: "+lastHostEvent());
 
@@ -407,13 +420,26 @@ public class LibraryFlowSmokeTest {
         require(edt(()->!find(app,ScanConfirmationPopup.class).isVisible() && find(app,Bookshelf.class).getComponentCount()==1),
                 "A late answer for an abandoned scan changes nothing");
 
+        // Signing out ends the session and takes this person's books off the screen;
+        // signing in again brings them back.
+        edt(()->{app.navigate(Destination.MENU);return true;});
+        click("profile");
+        click("로그아웃");
+        require(hostEvents.subList(hostEvents.size()-2,hostEvents.size()).equals(List.of("hide","signOut")),
+                "Signing out is passed on to the host: "+hostEvents);
+        require(edt(()->app.currentDestination()==null && find(app,Bookshelf.class).getComponentCount()==0
+                && named(app,"카카오 로그인")!=null),"Back on the login screen with an empty shelf");
+        click("카카오 로그인");
+        waitFor("shelf of the person signing in",()->find(app,Bookshelf.class).getComponentCount()==1);
+        require(lastHostEvent().equals("hide") && hostEvents.contains("signIn"),"Signed in again: "+hostEvents);
+
         // Server unreachable: the popup reports it instead of waiting forever.
         server.stop(0);
         edt(()->{app.navigate(Destination.ADD_BOOK);return true;});
         click("도서 스캔");
         waitFor("request failed message",()->"request failed".equals(statusText()));
 
-        System.out.println("PASS: JSON, server shelf, YES24 credit, camera preview requests, capture at press, scan -> book -> confirm -> shelf, page capture -> retake -> save -> reading page, marks carried over, long text scrolls, no barcode, cancel, late answer, server down");
+        System.out.println("PASS: JSON, sign in, server shelf, YES24 credit, camera preview requests, capture at press, scan -> book -> confirm -> shelf, page capture -> retake -> save -> reading page, marks carried over, long text scrolls, no barcode, cancel, late answer, sign out and in again, server down");
     }
 
     public static void main(String[] args) {

@@ -74,6 +74,39 @@ public final class DesktopHost implements HostBridge {
         worker.setDaemon(true);worker.start();
     }
 
+    @Override public void signIn(Consumer<String> done) {
+        String typed=JOptionPane.showInputDialog(null,
+                "로그인할 이름 (영문 소문자·숫자 2~20자)",
+                "Archive Fever 로그인",JOptionPane.PLAIN_MESSAGE);
+        if(typed==null || typed.isBlank())return;
+        Thread worker=new Thread(()->{
+            try {
+                LibraryApi.User user=api.signInByName(typed.strip());
+                SwingUtilities.invokeLater(()->{
+                    // Marks made while reading are kept apart for each person on this computer.
+                    System.setProperty("archivefever.notes.dir",java.nio.file.Path.of(System.getProperty("user.home"),
+                            ".archivefever","notes",user.id()).toString());
+                    done.accept(user.nickname());
+                });
+            } catch(IOException | RuntimeException e) {
+                // The desktop can only sign in by name; a server set up for Kakao refuses that.
+                SwingUtilities.invokeLater(()->JOptionPane.showMessageDialog(null,
+                        "로그인하지 못했습니다. 이름을 확인하거나, "
+                        +"서버가 카카오 로그인만 받는지 확인해 주세요.\n("+e.getMessage()+")",
+                        "Archive Fever",JOptionPane.WARNING_MESSAGE));
+            }
+        },"desktop-sign-in");
+        worker.setDaemon(true);worker.start();
+    }
+
+    @Override public void signOut() {
+        Thread worker=new Thread(()->{
+            // Offline, the session simply runs out on the server by itself.
+            try {api.signOut();} catch(IOException | RuntimeException ignored) {}
+        },"desktop-sign-out");
+        worker.setDaemon(true);worker.start();
+    }
+
     @Override public void openUrl(String url) {
         try {
             if(Desktop.isDesktopSupported())Desktop.getDesktop().browse(URI.create(url));

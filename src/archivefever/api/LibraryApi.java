@@ -26,9 +26,23 @@ public final class LibraryApi {
     /** Text collected from a page of a book. @param page null when the reader left it out */
     public record Passage(Integer page,String text) {}
 
+    /** Someone signed in. @param id also names their folder of reading notes */
+    public record User(String id,String nickname) {}
+
     private final ApiClient client;
 
     public LibraryApi(ApiClient client) {this.client=client;}
+
+    /**
+     * Signs in by name alone, which the server allows while it has no Kakao key. Kakao
+     * sign-in needs a browser and is done by the web page, not from here.
+     */
+    public User signInByName(String name) throws IOException {
+        Object user=client.post("/api/auth/dev","{\"name\":"+Json.quote(name)+"}");
+        return new User(Json.string(user,"id"),Json.string(user,"nickname"));
+    }
+
+    public void signOut() throws IOException {client.postForNothing("/api/auth/logout");}
 
     public Scan createScan() throws IOException {return scan(client.post("/api/scans"));}
 

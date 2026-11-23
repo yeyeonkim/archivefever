@@ -78,6 +78,23 @@ public final class LibraryController {
         sentences=panel;onPassageSaved=onSaved;
     }
 
+    /**
+     * Signs in through the host and loads that person's shelf.
+     * @param done told the name they go by, once signed in
+     */
+    public void signIn(Consumer<String> done) {
+        host.signIn(name->{reloadShelf();done.accept(name);});
+    }
+
+    /** Ends the session and takes the books off the screen: they are the last person's. */
+    public void signOut() {
+        dropScan();
+        shelfGeneration++;passageGeneration++;
+        shelf.setBooks(List.of());
+        authors.clear();
+        host.signOut();
+    }
+
     /** Replaces the shelf with the user's books from the server. */
     public void reloadShelf() {
         int load=++shelfGeneration;

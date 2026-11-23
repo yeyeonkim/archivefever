@@ -15,8 +15,14 @@ src as the source root, so keep resources inside src and retain this layout in
 the compiled output/JAR. Do not mark src/resources as a separate resource root
 without also updating the resource paths.
 
-The login button is a UI prototype: it performs no OAuth and opens a temporary
-main screen. Replace AppShell.onKakaoLogin when backend authentication is ready.
+Without a server the login button lets everyone straight in, on demo data. With one,
+it asks the host to sign the person in (HostBridge.signIn): the desktop asks for a name
+and signs in by it, which the server allows while it has no Kakao key. In the browser the
+web page signs people in (Kakao, or by name) before it starts this UI, hands over the
+name (-Darchivefever.user) and the UI opens on that person's shelf; its own login screen
+is not shown. AppShell.signedIn is the one place both ways arrive at. Logout tells the
+host to end the session (HostBridge.signOut); in the browser that reloads the page into
+its sign-in screen. The profile popup shows the name of whoever is signed in.
 
 ## Main screen and bookmarks
 

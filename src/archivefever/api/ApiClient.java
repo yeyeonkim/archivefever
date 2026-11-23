@@ -13,7 +13,14 @@ import java.nio.charset.StandardCharsets;
  * Uses HttpURLConnection because that is what the browser JVM maps onto fetch.
  */
 public final class ApiClient {
+    private static final String SESSION_COOKIE="AF_SESSION";
     private final String base;
+    /**
+     * The session cookie the server set at sign-in, sent back with every request. Only on
+     * the desktop: in the browser JVM the browser keeps the cookie and adds it itself, and
+     * does not show it to the page.
+     */
+    private volatile String session;
 
     /** @param base server address without a path, e.g. http://localhost:8080 */
     public ApiClient(String base) {
@@ -43,6 +50,15 @@ public final class ApiClient {
         return Json.parse(text(read(connection)));
     }
 
+    /** POST whose answer has no content, such as signing out. */
+    public void postForNothing(String path) throws IOException {
+        HttpURLConnection connection=open(path,"POST");
+        connection.setDoOutput(true);
+        connection.setFixedLengthStreamingMode(0);
+        connection.getOutputStream().close();
+        read(connection);
+    }
+
     public Object postFile(String path,String field,String filename,byte[] content) throws IOException {
         String boundary="----archivefever"+Long.toHexString(System.nanoTime());
         ByteArrayOutputStream body=new ByteArrayOutputStream();
@@ -70,12 +86,15 @@ public final class ApiClient {
         // Uploading a photo includes the server's barcode reading and book lookup.
         connection.setReadTimeout(30_000);
         connection.setRequestProperty("Accept","application/json, image/png");
+        String cookie=session;
+        if(cookie!=null)connection.setRequestProperty("Cookie",SESSION_COOKIE+"="+cookie);
         return connection;
     }
 
-    private static byte[] read(HttpURLConnection connection) throws IOException {
+    private byte[] read(HttpURLConnection connection) throws IOException {
         try {
             int status=connection.getResponseCode();
+            rememberSession(connection);
             if(status<200 || status>=300) {
                 InputStream error=connection.getErrorStream();
                 if(error!=null)try(error){error.readAllBytes();}
@@ -83,6 +102,18 @@ public final class ApiClient {
             }
             try(InputStream in=connection.getInputStream()) {return in.readAllBytes();}
         } finally {connection.disconnect();}
+    }
+
+    /** Signing in sets the session cookie and signing out clears it. */
+    private void rememberSession(HttpURLConnection connection) {
+        java.util.List<String> cookies=connection.getHeaderFields().get("Set-Cookie");
+        if(cookies==null)return;
+        for(String cookie:cookies) {
+            if(!cookie.startsWith(SESSION_COOKIE+"="))continue;
+            int end=cookie.indexOf(';');
+            String value=cookie.substring(SESSION_COOKIE.length()+1,end<0?cookie.length():end);
+            session=value.isEmpty()?null:value;
+        }
     }
 
     private static String text(byte[] bytes) {return new String(bytes,StandardCharsets.UTF_8);}

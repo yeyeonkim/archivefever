@@ -195,7 +195,7 @@ public final class AppShell extends JPanel {
         dismissMenuPopups();dismissScanConfirmation();selectionPopup.setVisible(false);menuPanel.resetHover();
         sentenceScanPanel.reset();readingRequest=null;
         friendPanel.reset();bookSwapPanel.reset();
-        if(library!=null)library.cameraScreen(false);
+        if(library!=null){library.cameraScreen(false);library.signOut();}
         notificationPopup.resetSession();loggedIn=false;currentDestination=null;
         navigation.setDestination(null);navigation.setVisible(false);
         screens.show(content,"login");repaint();
@@ -367,7 +367,18 @@ public final class AppShell extends JPanel {
     }
 
     private void onKakaoLogin() {
-        // Replace with the backend authentication-success callback.
+        // Without a server everyone is let straight in, on demo data.
+        if(library==null){signedIn("");return;}
+        library.signIn(this::signedIn);
+    }
+
+    /**
+     * Someone is signed in: through the login button, or because the host (the web page)
+     * had already signed them in before starting this UI.
+     * @param name the name they go by, shown in the profile
+     */
+    public void signedIn(String name) {
+        profilePopup.setUser(name);
         loggedIn=true;
         navigate(Destination.ARCHIVE);
     }

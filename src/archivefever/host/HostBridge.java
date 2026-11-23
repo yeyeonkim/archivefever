@@ -55,6 +55,16 @@ public interface HostBridge {
      */
     default void savePassage(String isbn13,Consumer<PassageResult> done) {done.accept(PassageResult.UNAVAILABLE);}
 
+    /**
+     * Signs the person in, in whatever way this host can, and reports the name they go by.
+     * Returns at once. A host with no accounts of its own lets everyone straight in.
+     * @param done told the name on the event thread; not called if the person gives up
+     */
+    default void signIn(Consumer<String> done) {done.accept("");}
+
+    /** Ends the session with the server. */
+    default void signOut() {}
+
     /** Opens a web page outside the app. */
     void openUrl(String url);
 }
