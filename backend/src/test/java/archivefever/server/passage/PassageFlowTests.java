@@ -2,6 +2,7 @@ package archivefever.server.passage;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import archivefever.server.auth.SignedIn;
 import archivefever.server.book.BookService;
 import archivefever.server.library.LibraryService;
 import java.util.List;
@@ -41,11 +42,8 @@ class PassageFlowTests {
 
 	@BeforeEach
 	void createClient() {
-		client = RestClient.builder()
-				.baseUrl("http://localhost:" + port)
-				// Statuses are asserted by the tests rather than thrown.
-				.defaultStatusHandler(status -> true, (request, response) -> { })
-				.build();
+		// Signed in as the user the shelf in these tests belongs to.
+		client = SignedIn.client(port, "demo");
 	}
 
 	@Test

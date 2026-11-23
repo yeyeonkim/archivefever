@@ -4,7 +4,6 @@ import archivefever.server.book.Book;
 import archivefever.server.book.BookLookup;
 import archivefever.server.book.BookService;
 import archivefever.server.library.LibraryService;
-import archivefever.server.user.CurrentUser;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -68,31 +67,28 @@ public class ScanService {
 
 	private final LibraryService library;
 
-	private final CurrentUser user;
-
 	private final Duration timeToLive;
 
 	private final Path uploads;
 
 	ScanService(ScanRepository scans, BarcodeReader barcodes, BookService books, LibraryService library,
-			CurrentUser user, @Value("${archivefever.scan.ttl}") Duration timeToLive,
+			@Value("${archivefever.scan.ttl}") Duration timeToLive,
 			@Value("${archivefever.data-dir}") String dataDirectory) {
 		this.scans = scans;
 		this.barcodes = barcodes;
 		this.books = books;
 		this.library = library;
-		this.user = user;
 		this.timeToLive = timeToLive;
 		this.uploads = Path.of(dataDirectory, "uploads");
 	}
 
-	public ScanView create() {
-		Scan scan = scans.save(new Scan(UUID.randomUUID().toString(), user.id(), Instant.now()));
+	public ScanView create(String userId) {
+		Scan scan = scans.save(new Scan(UUID.randomUUID().toString(), userId, Instant.now()));
 		return view(scan);
 	}
 
-	public ScanView get(String id) {
-		return view(load(id));
+	public ScanView get(String id, String userId) {
+		return view(loadOwn(id, userId));
 	}
 
 	/** Reads the barcode from the photo and looks the book up. Only a PENDING scan accepts a photo. */
@@ -116,8 +112,8 @@ public class ScanService {
 	}
 
 	/** Adds the scanned book to the user's library. Confirming again returns the same book. */
-	public LibraryService.ShelfBook confirm(String id) {
-		Scan scan = load(id);
+	public LibraryService.ShelfBook confirm(String id, String userId) {
+		Scan scan = loadOwn(id, userId);
 		if (scan.status() != ScanStatus.RESOLVED && scan.status() != ScanStatus.CONFIRMED) {
 			throw new ScanStateException(scan, "confirm");
 		}
@@ -148,11 +144,22 @@ public class ScanService {
 		}
 	}
 
+	/** The scan, for the user who created it. Another user's scan is reported the same way as a missing one. */
+	private Scan loadOwn(String id, String userId) {
+		Scan scan = load(id);
+		if (!scan.userId().equals(userId)) {
+			throw new ScanNotFoundException(id);
+		}
+		return scan;
+	}
+
+	/**
+	 * The scan, for whoever knows its id. That is how the phone app, which has no session of
+	 * its own, delivers the photo or calls the scan off: the id is random, and only the
+	 * signed-in client that created the scan was told it.
+	 */
 	private Scan load(String id) {
-		Scan scan = scans.findById(id)
-				// Another user's scan is reported the same way as a missing one.
-				.filter(found -> found.userId().equals(user.id()))
-				.orElseThrow(() -> new ScanNotFoundException(id));
+		Scan scan = scans.findById(id).orElseThrow(() -> new ScanNotFoundException(id));
 		if (scan.status() == ScanStatus.PENDING && scan.createdAt().plus(timeToLive).isBefore(Instant.now())) {
 			scan.setStatus(ScanStatus.EXPIRED);
 			scans.save(scan);

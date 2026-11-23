@@ -2,6 +2,7 @@ package archivefever.server.scan;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import archivefever.server.auth.SignedIn;
 import archivefever.server.book.StubBookLookup;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -39,11 +40,8 @@ class ScanFlowTests {
 
 	@BeforeEach
 	void createClient() {
-		client = RestClient.builder()
-				.baseUrl("http://localhost:" + port)
-				// Statuses are asserted by the tests rather than thrown.
-				.defaultStatusHandler(status -> true, (request, response) -> { })
-				.build();
+		// Signed in as the user the shelf in these tests belongs to.
+		client = SignedIn.client(port, "demo");
 	}
 
 	@Test
