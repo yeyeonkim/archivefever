@@ -6,6 +6,7 @@ import archivefever.model.BookSpine;
 import archivefever.ui.components.LinkLabel;
 import archivefever.ui.components.ScanConfirmationPopup;
 import archivefever.ui.components.ScanResultView;
+import archivefever.ui.screens.CameraScanPanel;
 import archivefever.ui.screens.MainPanel;
 import archivefever.ui.theme.AppColors;
 import archivefever.ui.theme.AppFonts;
@@ -59,8 +60,17 @@ public final class LibraryController {
         background(this::loadShelf,books->{if(load==shelfGeneration)shelf.setBooks(books);},error->{});
     }
 
+    /** Called when the add-book camera screen comes into view (or back into view) or leaves it. */
+    public void cameraScreen(boolean showing) {
+        java.awt.Rectangle display=CameraScanPanel.DISPLAY;
+        if(showing)host.showCamera(display.x,display.y,display.width,display.height,CameraScanPanel.DISPLAY_CORNER);
+        else host.hideCamera();
+    }
+
     /** Called when the confirmation popup has just opened for a new scan. */
     public void scanStarted() {
+        // Take the picture at the moment of the press; it is uploaded once the scan exists.
+        host.capturePhoto();
         dropScan();
         int scan=scanGeneration;
         result.showMessage("opening camera...");

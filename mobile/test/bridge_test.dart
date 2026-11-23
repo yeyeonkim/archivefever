@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:archive_fever/bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,6 +16,34 @@ void main() {
       final message = BridgeMessage.parse('{"type":"openUrl","url":"https://www.yes24.com/Product/Goods/1"}');
 
       expect((message as OpenUrlRequest).url, Uri.parse('https://www.yes24.com/Product/Goods/1'));
+    });
+
+    test('reads where the camera preview belongs', () {
+      final message = BridgeMessage.parse(
+          '{"type":"camera","visible":true,"x":45.37,"y":123.01,"width":237.29,"height":321.91,"radius":6.98}');
+
+      final request = message as CameraRequest;
+      expect(request.rect, const Rect.fromLTWH(45.37, 123.01, 237.29, 321.91));
+      expect(request.radius, 6.98);
+    });
+
+    test('reads that the camera screen has gone', () {
+      final message = BridgeMessage.parse('{"type":"camera","visible":false}');
+
+      expect((message as CameraRequest).rect, isNull);
+    });
+
+    test('rejects a camera place that cannot be on a screen', () {
+      expect(BridgeMessage.parse('{"type":"camera","visible":true,"x":0,"y":0,"width":0,"height":100}'), isNull);
+      expect(BridgeMessage.parse('{"type":"camera","visible":true,"x":0,"y":0,"width":-5,"height":100}'), isNull);
+      expect(BridgeMessage.parse('{"type":"camera","visible":true,"x":"0","y":0,"width":10,"height":10}'), isNull);
+      expect(BridgeMessage.parse('{"type":"camera","visible":true,"x":0,"y":0,"width":1e9,"height":10}'), isNull);
+      expect(BridgeMessage.parse('{"type":"camera","visible":true}'), isNull);
+      expect(BridgeMessage.parse('{"type":"camera"}'), isNull);
+    });
+
+    test('reads the request to take the photo now', () {
+      expect(BridgeMessage.parse('{"type":"capture"}'), isA<CaptureRequest>());
     });
 
     test('reads the ready signal', () {

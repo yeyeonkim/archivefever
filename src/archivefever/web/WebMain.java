@@ -64,6 +64,7 @@ public final class WebMain {
                     if(scale!=view.scale())view.setScale(scale);
                     Dimension size=view.getPreferredSize();
                     view.setBounds((getWidth()-size.width)/2,(getHeight()-size.height)/2,size.width,size.height);
+                    WebHost.designPlacedAt(scale,view.getX(),view.getY());
                     if(DEBUG)System.out.println("[web] stage "+getWidth()+"x"+getHeight()+" scale "+scale+" view "+view.getBounds());
                 }
             };

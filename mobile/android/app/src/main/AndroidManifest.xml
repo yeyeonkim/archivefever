@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The app is a shell around the Swing UI served by the Archive Fever backend. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Live preview inside the Swing camera screen, and the barcode photo taken from it. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="Archive Fever"
         android:networkSecurityConfig="@xml/network_security_config"

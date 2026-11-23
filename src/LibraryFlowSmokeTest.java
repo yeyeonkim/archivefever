@@ -44,6 +44,8 @@ public class LibraryFlowSmokeTest {
 
     private static final List<String> scanRequests=new CopyOnWriteArrayList<>();
     private static final List<String> openedUrls=new CopyOnWriteArrayList<>();
+    /** Camera and scan requests made of the host, in order. */
+    private static final List<String> hostEvents=new CopyOnWriteArrayList<>();
     private static AppShell app;
 
     private static byte[] png(int width,int height) throws Exception {
@@ -122,6 +124,7 @@ public class LibraryFlowSmokeTest {
         edt(()->{((JButton)named(app,name)).doClick(0);return true;});
     }
     private static void require(boolean value,String message) {if(!value)throw new AssertionError(message);}
+    private static String lastHostEvent() {return hostEvents.isEmpty()?"":hostEvents.get(hostEvents.size()-1);}
     private static String statusText() {
         return named(app,"도서 조회 상태") instanceof JLabel label?label.getText():null;
     }
@@ -130,8 +133,11 @@ public class LibraryFlowSmokeTest {
     }
     private static void startScan(String expectedId) throws Exception {
         edt(()->{app.navigate(Destination.ADD_BOOK);return true;});
+        require(lastHostEvent().equals("show 52,141 272x369"),"Camera screen asks for the live preview: "+lastHostEvent());
         click("도서 스캔");
         waitFor("host asked to scan "+expectedId,()->scanRequests.contains(expectedId));
+        int scan=hostEvents.lastIndexOf("scan "+expectedId);
+        require(hostEvents.get(scan-1).equals("capture"),"The photo is taken at the press, before the scan exists: "+hostEvents);
         waitFor("waiting message",()->"waiting for photo...".equals(statusText()));
         require(edt(()->!canConfirm()),"Nothing to confirm before the photo arrives");
     }
@@ -146,7 +152,12 @@ public class LibraryFlowSmokeTest {
         server.start();
         String address="http://127.0.0.1:"+server.getAddress().getPort();
         HostBridge host=new HostBridge() {
-            @Override public void startScan(String scanId) {scanRequests.add(scanId);}
+            @Override public void showCamera(int x,int y,int width,int height,int cornerRadius) {
+                hostEvents.add("show "+x+","+y+" "+width+"x"+height);
+            }
+            @Override public void hideCamera() {hostEvents.add("hide");}
+            @Override public void capturePhoto() {hostEvents.add("capture");}
+            @Override public void startScan(String scanId) {scanRequests.add(scanId);hostEvents.add("scan "+scanId);}
             @Override public void openUrl(String url) {openedUrls.add(url);}
         };
         edt(()->{
@@ -161,6 +172,7 @@ public class LibraryFlowSmokeTest {
         });
         waitFor("server shelf replaces demo books",()->find(app,Bookshelf.class).getComponentCount()==0);
         require(edt(()->named(app,"도서 정보 출처 YES24")!=null),"Shelf credits YES24");
+        require(lastHostEvent().equals("hide"),"No camera preview away from the camera screen: "+lastHostEvent());
 
         // Photo arrives and the book is found: confirm it onto the shelf.
         startScan("scan-1");
@@ -177,6 +189,7 @@ public class LibraryFlowSmokeTest {
         require(edt(()->TITLE.equals(find(app,Bookshelf.class).getComponent(0).getAccessibleContext().getAccessibleName())),
                 "Spine carries the title");
         require(!cancelled.contains("scan-1"),"A confirmed scan is not cancelled");
+        require(lastHostEvent().equals("hide"),"The preview goes away with the camera screen: "+lastHostEvent());
 
         // Photo has no barcode: say so and offer nothing.
         startScan("scan-2");
@@ -185,6 +198,7 @@ public class LibraryFlowSmokeTest {
         require(edt(()->!canConfirm()),"Nothing to confirm without a book");
         click("스캔 다시 하기");
         require(edt(()->!find(app,ScanConfirmationPopup.class).isVisible()),"No closes the popup");
+        require(lastHostEvent().startsWith("show "),"Back on the camera screen the preview returns: "+lastHostEvent());
 
         // Popup closed before any photo: the waiting scan is cancelled on the server.
         startScan("scan-3");
@@ -201,7 +215,7 @@ public class LibraryFlowSmokeTest {
         click("도서 스캔");
         waitFor("request failed message",()->"request failed".equals(statusText()));
 
-        System.out.println("PASS: JSON, server shelf, YES24 credit, scan -> book -> confirm -> shelf, no barcode, cancel, late answer, server down");
+        System.out.println("PASS: JSON, server shelf, YES24 credit, camera preview requests, capture at press, scan -> book -> confirm -> shelf, no barcode, cancel, late answer, server down");
     }
 
     public static void main(String[] args) {

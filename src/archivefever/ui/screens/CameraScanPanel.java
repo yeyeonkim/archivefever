@@ -8,6 +8,12 @@ import java.awt.image.BufferedImage;
 
 /** Visual camera shell. No device access, preview, recognition or network request. */
 public class CameraScanPanel extends JPanel {
+    /**
+     * The opening of the camera illustration's display, in design coordinates. A host with a
+     * real camera shows its live preview exactly here, over the blank display.
+     */
+    public static final Rectangle DISPLAY=new Rectangle(52,141,272,369);
+    public static final int DISPLAY_CORNER=8;
     private final BufferedImage wallpaper=AppTheme.image("images/addbook/wallpaper.png");
     private final BufferedImage camera=AppTheme.image("images/addbook/camera-frame.png");
     private final JLabel title=new JLabel("",SwingConstants.CENTER);

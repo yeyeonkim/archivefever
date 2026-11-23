@@ -117,6 +117,7 @@ public final class AppShell extends JPanel {
         if(destination==Destination.BOOK_SWAP)bookSwapPanel.reload();
         navigation.setDestination(destination);navigation.setSentenceCaptureLayout(false);
         navigation.setVisible(true);
+        if(library!=null)library.cameraScreen(destination==Destination.ADD_BOOK);
     }
 
     private void openSentenceScan(BookSpine book){
@@ -140,7 +141,10 @@ public final class AppShell extends JPanel {
     }
     private void dismissScanConfirmation(){
         if(library!=null)library.cancel();
+        boolean reviewing=scanPopup.isVisible();
         scanPopup.setVisible(false);addBookPanel.setReviewing(false);repaint();
+        // Back from reviewing a scan to the camera screen: the live preview returns.
+        if(reviewing && library!=null && currentDestination==Destination.ADD_BOOK)library.cameraScreen(true);
     }
     /** Runs the add-book flow and the shelf against the server; without this they stay on demo data. */
     public void connect(LibraryController controller){
@@ -175,6 +179,7 @@ public final class AppShell extends JPanel {
         dismissMenuPopups();dismissScanConfirmation();selectionPopup.setVisible(false);menuPanel.resetHover();
         sentenceScanPanel.reset();
         friendPanel.reset();bookSwapPanel.reset();
+        if(library!=null)library.cameraScreen(false);
         notificationPopup.resetSession();loggedIn=false;currentDestination=null;
         navigation.setDestination(null);navigation.setVisible(false);
         screens.show(content,"login");repaint();

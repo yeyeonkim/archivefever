@@ -41,11 +41,13 @@ class ScanService {
   /// Path of the last photo that failed to upload, kept for [retry].
   String? _undelivered;
 
-  Future<ScanOutcome> scan(String scanId) async {
+  /// Delivers a photo to the scan. [takePhoto] supplies it when the app already has one
+  /// (taken from the live preview); otherwise the system camera is opened.
+  Future<ScanOutcome> scan(String scanId, {PhotoTaker? takePhoto}) async {
     await pending.save(scanId);
     String? photo;
     try {
-      photo = await _takePhoto();
+      photo = await (takePhoto ?? _takePhoto)();
     } catch (_) {
       // No camera, or permission refused: the same as backing out.
       photo = null;

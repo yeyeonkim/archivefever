@@ -69,6 +69,27 @@ void main() {
     expect(pending.value, isNull);
   });
 
+  test('a photo already taken from the live preview is used instead of opening a camera', () async {
+    var cameraOpened = false;
+    final scans = service(status: 200, takePhoto: () async {
+      cameraOpened = true;
+      return null;
+    });
+
+    final outcome = await scans.scan('scan-7', takePhoto: () async => photo);
+
+    expect(outcome, ScanOutcome.uploaded);
+    expect(cameraOpened, isFalse);
+    expect(requests.single.url.path, '/api/scans/scan-7/image');
+  });
+
+  test('a live-preview shot that failed cancels the scan', () async {
+    final outcome = await service(status: 200, takePhoto: () async => photo).scan('scan-8', takePhoto: () async => null);
+
+    expect(outcome, ScanOutcome.cancelled);
+    expect(requests.single.url.path, '/api/scans/scan-8/cancel');
+  });
+
   test('backing out of the camera cancels the scan', () async {
     final outcome = await service(status: 200, takePhoto: () async => null).scan('scan-2');
 
