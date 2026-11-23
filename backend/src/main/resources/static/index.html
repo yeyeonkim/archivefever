@@ -18,12 +18,84 @@
     padding: 4px 8px; border-radius: 6px;
     background: rgba(0, 0, 0, .6); color: #fff; font: 12px monospace;
   }
+
+  /* The sign-in screen: the Swing login screen (LoginPanel) redrawn in HTML, on the same
+     412 x 917 design scaled to fit, so that nobody waits for the Java runtime to start
+     just to be sent to Kakao and back. Positions are the ones LoginPanel paints at; the
+     artwork is copied from the Swing resources when the server is built. */
+  @font-face {
+    font-family: 'Cormorant Garamond';
+    font-weight: 700;
+    src: url('login/CormorantGaramond-Bold.ttf') format('truetype');
+  }
+  #signin { position: fixed; inset: 0; }
+  #signin-stage {
+    position: absolute; left: 50%; top: 50%; width: 412px; height: 917px;
+    transform: translate(-50%, -50%) scale(var(--scale, 1));
+    overflow: hidden; background: #fffee4;
+  }
+  #signin-stage > * { position: absolute; margin: 0; box-sizing: border-box; }
+  .carpet {
+    left: 0; top: 783px; width: 412px; height: 135px;
+    background: linear-gradient(rgba(231, 47, 47, .2), rgba(231, 47, 47, .2)),
+                url('login/login-carpet.png') center / cover;
+  }
+  .wallpaper { left: -29px; width: 450px; height: 446px; background: url('login/login-wallpaper.png') center / cover; }
+  .wallpaper.upper { top: 0; }
+  .wallpaper.lower { top: 244px; }
+  .wood { top: 517px; height: 304px; background-image: url('login/login-wood.png'); background-repeat: no-repeat; }
+  .wood.right { left: 181px; width: 347px; background-size: cover; background-position: center; }
+  .wood.left { left: -114px; width: 302px; background-size: 347px 304px; background-position: 0 0; }
+  .title {
+    left: 74px; top: 370px; width: 320px; height: 46px;
+    font: 700 36px/46px 'Cormorant Garamond', serif; color: #000; white-space: nowrap;
+  }
+  .kakao {
+    left: 64px; top: 429px; width: 284px; height: 43px; border-radius: 6px;
+    background: #fee500; color: rgba(0, 0, 0, .85); text-decoration: none;
+    font: 700 14.16px/43px sans-serif; text-align: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .kakao:active { background: #e5ce00; }
+  .kakao img { position: absolute; left: 13.2px; top: 13px; width: 17px; height: 17px; }
+  #byname { left: 64px; top: 484px; width: 284px; }
+  #byname.alone { top: 429px; }
+  #byname input, #byname button {
+    height: 38px; border-radius: 6px; font: 15px/1 sans-serif; box-sizing: border-box; vertical-align: top;
+  }
+  #byname input {
+    width: 184px; padding: 0 10px; border: 1px solid #8a7a66; background: rgba(255, 254, 228, .92); color: #211b17;
+  }
+  #byname button { width: 94px; margin-left: 6px; border: 0; background: #211b17; color: #fffee4; }
+  #byname button:disabled { opacity: .5; }
+  #byname p { margin: 6px 0 0; font: 11px/1.4 sans-serif; color: #4a3f35; background: rgba(255, 254, 228, .8); padding: 2px 4px; border-radius: 3px; }
+  #signin-message {
+    left: 44px; top: 580px; width: 324px; padding: 6px 8px; border-radius: 4px; text-align: center;
+    font: 12.5px/1.4 sans-serif; color: #fff; background: rgba(120, 30, 30, .88);
+  }
 </style>
 <!-- The free CheerpJ licence requires loading the runtime from its CDN. -->
 <script src="https://cjrtnc.leaningtech.com/5.0/loader.js"></script>
 </head>
 <body>
 <div id="display"></div>
+<div id="signin" hidden>
+  <div id="signin-stage">
+    <div class="carpet"></div>
+    <div class="wallpaper upper"></div>
+    <div class="wallpaper lower"></div>
+    <div class="wood right"></div>
+    <div class="wood left"></div>
+    <div class="title">ARCHIVE FEVER</div>
+    <a id="kakao" class="kakao" href="/auth/kakao/login" hidden><img src="login/kakao-logo.svg" alt="">카카오 로그인</a>
+    <form id="byname" hidden>
+      <input id="name" name="name" autocomplete="username" autocapitalize="none" spellcheck="false"
+             maxlength="20" placeholder="이름 (영문 소문자·숫자)" aria-label="로그인할 이름"><button type="submit">로그인</button>
+      <p>개발용 로그인입니다. 같은 이름으로 들어오면 같은 서재가 열립니다.</p>
+    </form>
+    <p id="signin-message" role="alert" hidden></p>
+  </div>
+</div>
 <div id="status">Archive Fever를 불러오는 중…</div>
 <div id="timer" hidden></div>
 <script type="module" src="host.js"></script>

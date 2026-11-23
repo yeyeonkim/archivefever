@@ -106,3 +106,15 @@ tasks.register('swingWeb') {
 tasks.named('bootRun') {
 	dependsOn 'swingWeb'
 }
+
+// The sign-in page (static/index.html) redraws the Swing login screen in HTML. Its artwork
+// and font are taken from the Swing resources here, rather than kept in the repository twice.
+tasks.named('processResources') {
+	from(swingSources) {
+		include 'resources/images/login-*.png'
+		include 'resources/fonts/CormorantGaramond-Bold.ttf'
+		include 'resources/icons/kakao-logo.svg'
+		eachFile { it.path = "static/login/${it.name}" }
+		includeEmptyDirs = false
+	}
+}
