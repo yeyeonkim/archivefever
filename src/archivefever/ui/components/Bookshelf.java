@@ -14,6 +14,10 @@ public final class Bookshelf extends JPanel {
     private final BufferedImage grain=AppTheme.image("images/main/shelf-grain.png");
     private final Consumer<BookSpine> onBookSelected;
     private List<BookSpine> books=List.of();
+    private boolean tinted;
+
+    /** Applies the darker wood layer of the Figma "Books for Swap" shelf, beneath the books. */
+    public void setTinted(boolean tinted) {this.tinted=tinted;repaint();}
 
     public Bookshelf(List<BookSpine> books, Consumer<BookSpine> onBookSelected) {
         this.onBookSelected=onBookSelected;
@@ -83,6 +87,7 @@ public final class Bookshelf extends JPanel {
             interior.fillRect(8,y+h-28,361,28);
             interior.dispose();
         }
+        if(tinted) {g.setColor(new Color(0xB0,0x6C,0x14,58));g.fillRect(0,0,377,749);}
         g.dispose();
     }
 }

@@ -1,6 +1,9 @@
 package archivefever.ui.navigation;
 
 import archivefever.mock.DemoBooks;
+import archivefever.mock.DemoSocial;
+import archivefever.model.BookSwap;
+import archivefever.ui.components.ChoicePopup;
 import archivefever.audio.SoundPlayer;
 import archivefever.ui.components.ScanConfirmationPopup;
 import archivefever.model.BookSpine;
@@ -24,6 +27,10 @@ public final class AppShell extends JPanel {
     private final AddBookPanel addBookPanel;
     private final SentenceScanPanel sentenceScanPanel;
     private final ScanConfirmationPopup scanPopup;
+    private final DemoSocial demoSocial=new DemoSocial(250,DemoBooks.load());
+    private final FriendPanel friendPanel;
+    private final BookSwapPanel bookSwapPanel;
+    private final ChoicePopup choicePopup=new ChoicePopup(this::dismissChoice);
     private final Runnable shutterSound;
     private final Runnable notificationSound;
     private final Runnable editSound;
@@ -65,8 +72,13 @@ public final class AppShell extends JPanel {
         content.add(addBookPanel,Destination.ADD_BOOK.name());
         sentenceScanPanel=new SentenceScanPanel(this::captureSentence,()->navigate(Destination.ARCHIVE));
         content.add(sentenceScanPanel,"sentence-scan");
+        friendPanel=new FriendPanel(demoSocial,choicePopup,this::showRequestedSwap);
+        content.add(friendPanel,Destination.FRIEND.name());
+        bookSwapPanel=new BookSwapPanel(demoSocial,this::openSwapNote);
+        content.add(bookSwapPanel,Destination.BOOK_SWAP.name());
         for(Destination destination:Destination.values())
-            if(destination!=Destination.ARCHIVE && destination!=Destination.MENU && destination!=Destination.ADD_BOOK)
+            if(destination!=Destination.ARCHIVE && destination!=Destination.MENU && destination!=Destination.ADD_BOOK
+                    && destination!=Destination.FRIEND && destination!=Destination.BOOK_SWAP)
                 content.add(new BlankPanel(destination.label()),destination.name());
         add(content);
         navigation=new BookmarkNavigation(this::navigate);
@@ -75,7 +87,8 @@ public final class AppShell extends JPanel {
         selectionPopup=new BookSelectionPopup(this::openReading,this::openSentenceScan,this::dismissBookSelection);
         selectionPopup.setBounds(0,0,412,917);selectionPopup.setVisible(false);
         add(selectionPopup,0);
-        notificationPopup=new NotificationPopup(this::dismissMenuPopups,this.notificationSound);
+        notificationPopup=new NotificationPopup(this::dismissMenuPopups,this.notificationSound,
+                ()->demoSocial.confirmRequest(DemoSocial.REQUESTER_ID),()->demoSocial.declineRequest(DemoSocial.REQUESTER_ID));
         profilePopup=new ProfilePopup(this::dismissMenuPopups,this::logout);
         for(JPanel popup:new JPanel[]{notificationPopup,profilePopup}){
             popup.setBounds(0,0,412,917);popup.setVisible(false);add(popup,0);
@@ -84,6 +97,7 @@ public final class AppShell extends JPanel {
             dismissScanConfirmation();navigate(Destination.ARCHIVE);
         });
         scanPopup.setBounds(0,0,412,917);scanPopup.setVisible(false);add(scanPopup,0);
+        choicePopup.setBounds(0,0,412,917);choicePopup.setVisible(false);add(choicePopup,0);
         screens.show(content,"login");
     }
 
@@ -93,6 +107,8 @@ public final class AppShell extends JPanel {
         sentenceScanPanel.reset();
         currentDestination=destination;
         screens.show(content,destination.name());
+        if(destination==Destination.FRIEND)friendPanel.reload();
+        if(destination==Destination.BOOK_SWAP)bookSwapPanel.reload();
         navigation.setDestination(destination);navigation.setSentenceCaptureLayout(false);
         navigation.setVisible(true);
     }
@@ -122,7 +138,9 @@ public final class AppShell extends JPanel {
     private void showNotifications(){
         if(!loggedIn || currentDestination!=Destination.MENU || notificationPopup.isVisible())return;
         notificationSound.run();
-        dismissMenuPopups();menuPanel.resetHover();notificationPopup.setVisible(true);
+        dismissMenuPopups();menuPanel.resetHover();
+        notificationPopup.syncFriendRequest(demoSocial.requestResult(DemoSocial.REQUESTER_ID));
+        notificationPopup.setVisible(true);
         notificationPopup.requestFocusInWindow();repaint();
     }
     private void showProfile(){
@@ -131,11 +149,19 @@ public final class AppShell extends JPanel {
         profilePopup.requestFocusInWindow();repaint();
     }
     private void dismissMenuPopups(){
-        notificationPopup.setVisible(false);profilePopup.setVisible(false);repaint();
+        notificationPopup.setVisible(false);profilePopup.setVisible(false);choicePopup.setVisible(false);repaint();
     }
+    private void dismissChoice(){choicePopup.setVisible(false);repaint();}
+    private void showRequestedSwap(){bookSwapPanel.showNewest();navigate(Destination.BOOK_SWAP);}
+    private void openSwapNote(BookSwap swap){
+        showReading(new ReadingPanel(swap.id(),swap.bookTitle(),swap.author(),swap.passage(),
+                swap.comments(),"@sujin",this::returnToArchive));
+    }
+    public DemoSocial demoSocial(){return demoSocial;}
     private void logout(){
         dismissMenuPopups();dismissScanConfirmation();selectionPopup.setVisible(false);menuPanel.resetHover();
         sentenceScanPanel.reset();
+        friendPanel.reset();bookSwapPanel.reset();
         notificationPopup.resetSession();loggedIn=false;currentDestination=null;
         navigation.setDestination(null);navigation.setVisible(false);
         screens.show(content,"login");repaint();
@@ -244,6 +270,10 @@ public final class AppShell extends JPanel {
     }
 
     private void openReading(BookSpine book) {
+        showReading(new ReadingPanel(book,this::returnToArchive));
+    }
+
+    private void showReading(ReadingPanel panel) {
         Window window=SwingUtilities.getWindowAncestor(this);
         if(!(window instanceof JFrame frame)) return;
         selectionPopup.setVisible(false);
@@ -252,7 +282,7 @@ public final class AppShell extends JPanel {
         mainWindowSize=frame.getSize();
         mainWindowLocation=frame.getLocation();
         mainWindowResizable=frame.isResizable();
-        readingPanel=new ReadingPanel(book,this::returnToArchive);
+        readingPanel=panel;
         frame.setResizable(true);
         frame.setContentPane(readingPanel);
         frame.setSize(readingWindowSize(frame,false));

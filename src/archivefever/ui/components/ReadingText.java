@@ -28,9 +28,18 @@ public final class ReadingText extends JPanel {
     private double scale=1;
     private float paragraphBottom;
     private String status;
+    private final List<String> comments;
+    private final String memoAuthor;
+    private final List<Row> commentRows=new ArrayList<>();
+    private final Map<Row,Integer> nameLengths=new HashMap<>();
+    private int bodyX,commentX;
 
-    public ReadingText(ReadingDocument document) {
+    public ReadingText(ReadingDocument document) {this(document,List.of(),"");}
+
+    /** Shared-note variant: friends' comments and "@me : note" lines appear under the passage. */
+    public ReadingText(ReadingDocument document,List<String> comments,String memoAuthor) {
         this.document=document;status=document.loadWarning();
+        this.comments=List.copyOf(comments);this.memoAuthor=memoAuthor;
         setLayout(null);setOpaque(false);
         getAccessibleContext().setAccessibleName("독서 본문: 필기구 선택 후 문장을 클릭하세요");
         editor.setOpaque(false);editor.setLineWrap(true);editor.setWrapStyleWord(true);
@@ -65,7 +74,7 @@ public final class ReadingText extends JPanel {
             @Override public void mouseReleased(MouseEvent e){popup(e);}
             @Override public void mouseClicked(MouseEvent e){
                 if(!SwingUtilities.isLeftMouseButton(e) && e.getButton()!=MouseEvent.NOBUTTON)return;
-                Point2D point=new Point2D.Double(e.getX()/scale,e.getY()/scale);
+                Point2D point=new Point2D.Double(e.getX()/scale-bodyX,e.getY()/scale);
                 int sentence=sentenceAt(point);
                 if(sentence>=0)apply(sentence);
                 else for(Memo memo:memos)if(point.getY()>=memo.top && point.getY()<memo.top+memo.height){edit(memo.sentence);break;}
@@ -96,6 +105,18 @@ public final class ReadingText extends JPanel {
     public void setTool(Tool tool){this.tool=tool;setCursor(Cursor.getPredefinedCursor(tool==Tool.NONE?Cursor.DEFAULT_CURSOR:Cursor.HAND_CURSOR));}
     public void cycleZoom(){zoom=(zoom+1)%3;refresh();}
     public void setDisplayScale(double scale){this.scale=scale;refresh();}
+    public void setInsets(int bodyX,int commentX){this.bodyX=bodyX;this.commentX=commentX;}
+    private void rememberName(String text,List<Row> noteRows){
+        int end=text.indexOf(' ');
+        if(text.startsWith("@") && end>0 && !noteRows.isEmpty())nameLengths.put(noteRows.get(0),end);
+    }
+    private void drawNoteRow(Graphics2D g,Row row){
+        row.layout.draw(g,0,row.baseline);
+        Integer name=nameLengths.get(row);
+        if(name==null)return;
+        double right=row.layout.getLogicalHighlightShape(0,name).getBounds2D().getMaxX();
+        g.setStroke(new BasicStroke(.7f));g.draw(new Line2D.Double(0,row.baseline+2,right,row.baseline+2));
+    }
     private Font font(){return AppFonts.body(14*zoomFactor()).deriveFont(Map.of(TextAttribute.TRACKING,-.02f));}
     private float lineHeight(){return 14*zoomFactor();}
     private static List<Row> wrap(String text,Font font,float width,float top) {
@@ -143,15 +164,21 @@ public final class ReadingText extends JPanel {
     @Override public void doLayout(){
         rows.clear();rows.addAll(wrap(document.text(),font(),327,0));
         paragraphBottom=rows.size()*lineHeight();
-        memos.clear();float y=paragraphBottom+15;
+        memos.clear();commentRows.clear();nameLengths.clear();float y=paragraphBottom+15;
         editor.setFont(font().deriveFont((float)(font().getSize2D()*scale)));
+        for(String comment:comments){
+            List<Row> noteRows=wrap(comment,font(),327,y);
+            rememberName(comment,noteRows);commentRows.addAll(noteRows);
+            y+=Math.max(lineHeight()*2,noteRows.size()*lineHeight())+8;
+        }
         for(int i=0;i<document.sentences().size();i++){
             ReadingDocument.Mark mark=document.mark(i);if(!mark.memo())continue;
-            String content=i==editing?editor.getText():mark.note();
+            String content=i==editing?editor.getText():memoAuthor.isEmpty()?mark.note():memoAuthor+" : "+mark.note();
             List<Row> noteRows=wrap(content,font(),327,y);
+            if(i!=editing)rememberName(content,noteRows);
             float height=Math.max(lineHeight()*2,noteRows.size()*lineHeight())+8;
             memos.add(new Memo(i,noteRows,y,height));
-            if(i==editing)editor.setBounds(0,(int)Math.round(y*scale),(int)Math.round(327*scale),
+            if(i==editing)editor.setBounds((int)Math.round(commentX*scale),(int)Math.round(y*scale),(int)Math.round(327*scale),
                     (int)Math.ceil(Math.min(height+lineHeight()*2,Math.max(lineHeight()*2,getHeight()/scale-y))*scale));
             y+=height;
         }
@@ -176,6 +203,7 @@ public final class ReadingText extends JPanel {
         Graphics2D g=(Graphics2D)graphics.create();g.scale(scale,scale);
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g.translate(bodyX,0);
         for(Row row:rows){
             for(int i=0;i<document.sentences().size();i++){
                 var sentence=document.sentences().get(i);var mark=document.mark(i);
@@ -190,11 +218,15 @@ public final class ReadingText extends JPanel {
             }
             g.setColor(Color.BLACK);row.layout.draw(g,0,row.baseline);
         }
-        if(!memos.isEmpty()){
+        g.translate(-bodyX,0);
+        if(!memos.isEmpty() || !commentRows.isEmpty()){
             g.setColor(Color.BLACK);g.setStroke(new BasicStroke(.7f));
             g.draw(new Line2D.Float(0,paragraphBottom+11,335,paragraphBottom+11));
             g.setColor(new Color(0x474747));
-            for(Memo memo:memos)if(memo.sentence!=editing)for(Row row:memo.rows)row.layout.draw(g,0,row.baseline);
+            g.translate(commentX,0);
+            for(Row row:commentRows)drawNoteRow(g,row);
+            for(Memo memo:memos)if(memo.sentence!=editing)for(Row row:memo.rows)drawNoteRow(g,row);
+            g.translate(-commentX,0);
         }
         if(!status.isEmpty()){
             g.setColor(new Color(0x9A2929));g.setFont(AppFonts.body(11));

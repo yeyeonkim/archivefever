@@ -40,8 +40,9 @@ public final class BookmarkNavigation extends JPanel {
             Rectangle bounds=new Rectangle(restBounds.get(bookmarkDestination));
             if(destination==Destination.MENU && bookmarkDestination==Destination.MENU)bounds.y-=49;
             if(destination==Destination.ADD_BOOK && bookmarkDestination==Destination.ADD_BOOK)bounds.y-=69;
-            if((destination==Destination.MENU || destination==Destination.ADD_BOOK)
-                    && bookmarkDestination==Destination.ARCHIVE)bounds.y+=18;
+            if(destination==Destination.FRIEND && bookmarkDestination==Destination.FRIEND)bounds.y-=66;
+            if(destination==Destination.BOOK_SWAP && bookmarkDestination==Destination.BOOK_SWAP)bounds.y-=43;
+            if(lowersArchive(destination) && bookmarkDestination==Destination.ARCHIVE)bounds.y+=18;
             button.setBounds(bounds);
             if(bookmarkDestination!=destination) button.resetLift();
         });
@@ -50,8 +51,13 @@ public final class BookmarkNavigation extends JPanel {
     public void setSentenceCaptureLayout(boolean active){
         Rectangle bounds=new Rectangle(restBounds.get(Destination.ARCHIVE));
         if(active)bounds.y-=20;
-        else if(currentDestination==Destination.MENU || currentDestination==Destination.ADD_BOOK)bounds.y+=18;
+        else if(lowersArchive(currentDestination))bounds.y+=18;
         bookmarks.get(Destination.ARCHIVE).setBounds(bounds);
+    }
+
+    private static boolean lowersArchive(Destination destination) {
+        return destination==Destination.MENU || destination==Destination.ADD_BOOK
+                || destination==Destination.FRIEND || destination==Destination.BOOK_SWAP;
     }
 
     @Override public boolean contains(int x,int y) {

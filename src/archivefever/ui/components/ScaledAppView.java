@@ -59,6 +59,7 @@ public final class ScaledAppView extends JPanel {
         };
         input.addMouseListener(mouse);
         input.addMouseMotionListener(mouse);
+        input.addMouseWheelListener(this::sendWheel);
         setScale(scale);
     }
 
@@ -108,6 +109,19 @@ public final class ScaledAppView extends JPanel {
             if(hovered != null) send(hovered,event,MouseEvent.MOUSE_ENTERED);
         }
         input.setCursor(hovered == null ? Cursor.getDefaultCursor() : hovered.getCursor());
+    }
+
+    private void sendWheel(MouseWheelEvent event) {
+        Component target=targetAt(event);
+        while(target!=null && target.getMouseWheelListeners().length==0) target=target==app?null:target.getParent();
+        if(target==null) return;
+        Point point=SwingUtilities.convertPoint(app,
+                (int)Math.floor(event.getX()/scale),
+                (int)Math.floor(event.getY()/scale),target);
+        target.dispatchEvent(new MouseWheelEvent(target,event.getID(),event.getWhen(),event.getModifiersEx(),
+                point.x,point.y,event.getXOnScreen(),event.getYOnScreen(),event.getClickCount(),event.isPopupTrigger(),
+                event.getScrollType(),event.getScrollAmount(),event.getWheelRotation(),event.getPreciseWheelRotation()));
+        repaint();
     }
 
     private void send(Component target, MouseEvent event, int id) {
