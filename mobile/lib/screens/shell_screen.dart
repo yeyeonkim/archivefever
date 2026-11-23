@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../bridge.dart';
+import '../exit_guard.dart';
 import '../scan_service.dart';
 import '../server.dart';
 import '../settings.dart';
@@ -24,6 +26,7 @@ class _ShellScreenState extends State<ShellScreen> {
   static const Color _backdrop = Color(0xFF2B211A);
 
   late final ScanService _scans = ScanService(server: widget.server, pending: widget.settings);
+  final ExitGuard _exitGuard = ExitGuard();
   late final WebViewController _web;
   bool _uploading = false;
   String? _loadError;
@@ -100,6 +103,23 @@ class _ShellScreenState extends State<ShellScreen> {
     if (!opened && mounted) _showMessage('링크를 열 수 없어요.');
   }
 
+  /// The Back button. Leaving would discard the running Swing UI, so the first press only
+  /// closes whatever popup the UI has open; a second press right after it leaves.
+  void _back() {
+    if (_exitGuard.shouldExit()) {
+      SystemNavigator.pop();
+      return;
+    }
+    // Defined by the host page; absent while the page is still loading.
+    _web.runJavaScript('window.hostBack && window.hostBack()').catchError((Object _) {});
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(
+        content: Text('한 번 더 누르면 앱을 종료합니다.'),
+        duration: Duration(seconds: 2),
+      ));
+  }
+
   void _showMessage(String text) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
@@ -117,19 +137,26 @@ class _ShellScreenState extends State<ShellScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _backdrop,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            WebViewWidget(controller: _web),
-            if (_loadError != null) _LoadError(server: widget.server, onRetry: _reload, onChangeServer: _changeServer),
-            if (_uploading)
-              const ColoredBox(
-                color: Color(0x99000000),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-          ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _back();
+      },
+      child: Scaffold(
+        backgroundColor: _backdrop,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              WebViewWidget(controller: _web),
+              if (_loadError != null)
+                _LoadError(server: widget.server, onRetry: _reload, onChangeServer: _changeServer),
+              if (_uploading)
+                const ColoredBox(
+                  color: Color(0x99000000),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -77,6 +77,19 @@ function pickPhotoInBrowser(scanId) {
   input.click();
 }
 
+// --- Requests from the phone app ------------------------------------------------------
+
+// The phone's Back button. The Swing UI has no "back", but Escape closes whatever popup
+// it has open, so the app calls this instead of leaving the page.
+window.hostBack = function () {
+  const target = document.activeElement || document.body;
+  for (const type of ['keydown', 'keyup']) {
+    target.dispatchEvent(new KeyboardEvent(type, {
+      key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true,
+    }));
+  }
+};
+
 // --- Start-up -------------------------------------------------------------------------
 
 // For diagnosing display problems: "?web.debug=true" in the address becomes the Java
