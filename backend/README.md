@@ -55,10 +55,14 @@ IntelliJ에서 `Main`을 실행할 때 VM 옵션에 서버 주소를 주면, 책
 | `POST /api/scans/{id}/cancel` | 사진을 기다리는 스캔 취소 |
 | `POST /api/scans/{id}/confirm` | 조회된 책을 내 서재에 추가 |
 | `GET /api/library/books` | 내 서재 |
+| `GET /api/library/books/{isbn13}/passages` | 그 책에서 수집한 문장. 쪽수 순(쪽수 없는 것은 마지막), 같은 쪽은 수집한 순 |
+| `POST /api/library/books/{isbn13}/passages` | 문장 수집. JSON `{"page": 127, "text": "…"}`, `page`는 생략 가능(1~9999), `text`는 2000자 이내. 서재에 없는 책은 404 |
 | `GET /api/images/{isbn13}/cover.png`, `spine.png` | 표지, 책등 이미지 |
 | `GET /api/health` | 서버 확인 |
 
 스캔 상태: `PENDING` → `RESOLVED`(책 찾음) / `NO_BARCODE` / `NOT_FOUND` / `FAILED` / `CANCELLED` / `EXPIRED`(5분), `RESOLVED` → `CONFIRMED`.
+
+수집한 문장은 글자만 저장합니다. 페이지 사진은 폰에서 글자를 읽는 데만 쓰이고 서버로 오지 않습니다.
 
 아직 로그인이 없어서 모든 요청은 데모 사용자 한 명의 것으로 처리됩니다.
 

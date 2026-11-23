@@ -40,6 +40,10 @@ public class LibraryService {
 		return shelfBook(isbn13).orElseThrow(() -> new IllegalStateException("No catalogue data for " + isbn13));
 	}
 
+	public boolean has(String userId, String isbn13) {
+		return library.existsByUserIdAndIsbn13(userId, isbn13);
+	}
+
 	/** The user's books, oldest first, which is the order they sit on the shelf. */
 	public List<ShelfBook> list(String userId) {
 		return library.findByUserIdOrderByAddedAtAscIdAsc(userId).stream()
