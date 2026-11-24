@@ -1,5 +1,6 @@
 package archivefever.ui.navigation;
 
+import archivefever.app.LibraryController;
 import archivefever.mock.DemoBooks;
 import archivefever.mock.DemoSocial;
 import archivefever.model.BookSwap;
@@ -36,6 +37,11 @@ public final class AppShell extends JPanel {
     private final Runnable editSound;
     private Destination currentDestination;
     private boolean loggedIn;
+    private boolean embedded;
+    private final MainPanel mainPanel;
+    private LibraryController library;
+    /** The book whose collected passages are being loaded for the reading screen, if any. */
+    private BookSpine readingRequest;
     private JFrame readingFrame;
     private Container mainContentPane;
     private Dimension mainWindowSize;
@@ -63,14 +69,15 @@ public final class AppShell extends JPanel {
         setPreferredSize(new Dimension(AppTheme.WIDTH,AppTheme.HEIGHT));
         content.setBounds(0,0,412,917);
         content.add(new LoginPanel(this::onKakaoLogin),"login");
-        content.add(new MainPanel(DemoBooks.load(),this::showBookSelection),Destination.ARCHIVE.name());
+        mainPanel=new MainPanel(DemoBooks.load(),this::showBookSelection);
+        content.add(mainPanel,Destination.ARCHIVE.name());
         menuPanel=new MenuPanel(this::showNotifications,this::showProfile,()->{
             if(loggedIn && currentDestination==Destination.MENU)this.editSound.run();
         });
         content.add(menuPanel,Destination.MENU.name());
         addBookPanel=new AddBookPanel(this::scanBook);
         content.add(addBookPanel,Destination.ADD_BOOK.name());
-        sentenceScanPanel=new SentenceScanPanel(this::captureSentence,()->navigate(Destination.ARCHIVE));
+        sentenceScanPanel=new SentenceScanPanel(this::captureSentence,this::leaveSentenceScan);
         content.add(sentenceScanPanel,"sentence-scan");
         friendPanel=new FriendPanel(demoSocial,choicePopup,this::showRequestedSwap);
         content.add(friendPanel,Destination.FRIEND.name());
@@ -94,6 +101,7 @@ public final class AppShell extends JPanel {
             popup.setBounds(0,0,412,917);popup.setVisible(false);add(popup,0);
         }
         scanPopup=new ScanConfirmationPopup(this::dismissScanConfirmation,()->{
+            if(library!=null){library.confirm();return;}
             dismissScanConfirmation();navigate(Destination.ARCHIVE);
         });
         scanPopup.setBounds(0,0,412,917);scanPopup.setVisible(false);add(scanPopup,0);
@@ -104,35 +112,60 @@ public final class AppShell extends JPanel {
     public void navigate(Destination destination) {
         if(!loggedIn) return;
         dismissMenuPopups();dismissScanConfirmation();selectionPopup.setVisible(false);menuPanel.resetHover();
-        sentenceScanPanel.reset();
+        sentenceScanPanel.reset();readingRequest=null;
         currentDestination=destination;
         screens.show(content,destination.name());
         if(destination==Destination.FRIEND)friendPanel.reload();
         if(destination==Destination.BOOK_SWAP)bookSwapPanel.reload();
         navigation.setDestination(destination);navigation.setSentenceCaptureLayout(false);
         navigation.setVisible(true);
+        if(library!=null)library.cameraScreen(destination==Destination.ADD_BOOK);
     }
 
     private void openSentenceScan(BookSpine book){
         if(!loggedIn || currentDestination!=Destination.ARCHIVE)return;
-        dismissMenuPopups();dismissScanConfirmation();selectionPopup.setVisible(false);
+        dismissMenuPopups();dismissScanConfirmation();selectionPopup.setVisible(false);readingRequest=null;
         sentenceScanPanel.setBook(book);
         screens.show(content,"sentence-scan");
         navigation.setDestination(Destination.ARCHIVE);navigation.setSentenceCaptureLayout(true);navigation.setVisible(true);
         sentenceScanPanel.requestFocusInWindow();repaint();
+        if(library!=null)library.cameraScreen(true);
     }
     private void captureSentence(){
-        if(!loggedIn || sentenceScanPanel.selectedBook()==null || sentenceScanPanel.isCaptured())return;
+        if(!loggedIn || sentenceScanPanel.selectedBook()==null)return;
+        // The same button: "scan." photographs the page, then as "save." it saves the picked lines.
+        if(sentenceScanPanel.isCaptured()){if(library!=null)library.savePassage();return;}
         shutterSound.run();sentenceScanPanel.showCaptured();repaint();
+        if(library!=null)library.pageCaptured();
     }
+    /** Back on the sentence screen: from a page under review to the camera for another photo, otherwise to the shelf. */
+    private void leaveSentenceScan(){
+        BookSpine book=sentenceScanPanel.selectedBook();
+        if(library==null || book==null || !sentenceScanPanel.isCaptured()){navigate(Destination.ARCHIVE);return;}
+        sentenceScanPanel.setBook(book);repaint();
+        library.cameraScreen(true);
+    }
+    /** A collected passage has been saved: the book's reading page shows it among the others. */
+    private void showCollected(BookSpine book){navigate(Destination.ARCHIVE);openReading(book);}
 
     private void scanBook(){
         if(!loggedIn || currentDestination!=Destination.ADD_BOOK || scanPopup.isVisible())return;
         scanPopup.resetResult();addBookPanel.setReviewing(true);
         shutterSound.run();scanPopup.setVisible(true);scanPopup.requestFocusInWindow();repaint();
+        if(library!=null)library.scanStarted();
     }
     private void dismissScanConfirmation(){
+        if(library!=null)library.cancel();
+        boolean reviewing=scanPopup.isVisible();
         scanPopup.setVisible(false);addBookPanel.setReviewing(false);repaint();
+        // Back from reviewing a scan to the camera screen: the live preview returns.
+        if(reviewing && library!=null && currentDestination==Destination.ADD_BOOK)library.cameraScreen(true);
+    }
+    /** Runs the add-book flow and the shelf against the server; without this they stay on demo data. */
+    public void connect(LibraryController controller){
+        library=controller;
+        controller.bind(mainPanel,scanPopup,()->{dismissScanConfirmation();navigate(Destination.ARCHIVE);});
+        controller.bindSentences(sentenceScanPanel,this::showCollected);
     }
 
     private void showNotifications(){
@@ -160,14 +193,21 @@ public final class AppShell extends JPanel {
     public DemoSocial demoSocial(){return demoSocial;}
     private void logout(){
         dismissMenuPopups();dismissScanConfirmation();selectionPopup.setVisible(false);menuPanel.resetHover();
-        sentenceScanPanel.reset();
+        sentenceScanPanel.reset();readingRequest=null;
         friendPanel.reset();bookSwapPanel.reset();
+        if(library!=null){library.cameraScreen(false);library.signOut();}
         notificationPopup.resetSession();loggedIn=false;currentDestination=null;
         navigation.setDestination(null);navigation.setVisible(false);
         screens.show(content,"login");repaint();
     }
 
     public Destination currentDestination() {return currentDestination;}
+
+    /**
+     * For a window whose size belongs to its host (a browser display): the reading screen
+     * then takes over the window as it is, instead of resizing it.
+     */
+    public void setEmbedded(boolean embedded) {this.embedded=embedded;}
 
     public boolean isReading() {return readingPanel!=null;}
 
@@ -270,7 +310,17 @@ public final class AppShell extends JPanel {
     }
 
     private void openReading(BookSpine book) {
-        showReading(new ReadingPanel(book,this::returnToArchive));
+        if(library==null){showReading(new ReadingPanel(book,this::returnToArchive));return;}
+        // Connected: the page shows the passages the reader has collected from this book.
+        readingRequest=book;
+        library.loadReading(book,reading->{
+            if(readingRequest!=book)return;
+            readingRequest=null;
+            ReadingPanel panel=new ReadingPanel(book.id(),book.title(),reading.author(),reading.text(),
+                    java.util.List.of(),"",this::returnToArchive);
+            panel.readingText().setPlaceholder(reading.notice());
+            showReading(panel);
+        });
     }
 
     private void showReading(ReadingPanel panel) {
@@ -283,9 +333,9 @@ public final class AppShell extends JPanel {
         mainWindowLocation=frame.getLocation();
         mainWindowResizable=frame.isResizable();
         readingPanel=panel;
-        frame.setResizable(true);
+        if(!embedded)frame.setResizable(true);
         frame.setContentPane(readingPanel);
-        frame.setSize(readingWindowSize(frame,false));
+        if(!embedded)frame.setSize(readingWindowSize(frame,false));
         frame.revalidate();
         frame.repaint();
     }
@@ -296,9 +346,11 @@ public final class AppShell extends JPanel {
         if(readingTransition!=null){readingTransition.stop();readingTransition=null;}
         readingPanel.finishTransition();
         frame.setContentPane(mainContentPane);
-        frame.setResizable(mainWindowResizable);
-        frame.setSize(mainWindowSize);
-        frame.setLocation(mainWindowLocation);
+        if(!embedded) {
+            frame.setResizable(mainWindowResizable);
+            frame.setSize(mainWindowSize);
+            frame.setLocation(mainWindowLocation);
+        }
         frame.revalidate();
         frame.repaint();
         readingPanel=null;
@@ -309,12 +361,24 @@ public final class AppShell extends JPanel {
     }
 
     private void dismissBookSelection() {
+        readingRequest=null;
         selectionPopup.setVisible(false);
         repaint();
     }
 
     private void onKakaoLogin() {
-        // Replace with the backend authentication-success callback.
+        // Without a server everyone is let straight in, on demo data.
+        if(library==null){signedIn("");return;}
+        library.signIn(this::signedIn);
+    }
+
+    /**
+     * Someone is signed in: through the login button, or because the host (the web page)
+     * had already signed them in before starting this UI.
+     * @param name the name they go by, shown in the profile
+     */
+    public void signedIn(String name) {
+        profilePopup.setUser(name);
         loggedIn=true;
         navigate(Destination.ARCHIVE);
     }

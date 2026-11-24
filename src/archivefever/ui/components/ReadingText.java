@@ -33,6 +33,9 @@ public final class ReadingText extends JPanel {
     private final List<Row> commentRows=new ArrayList<>();
     private final Map<Row,Integer> nameLengths=new HashMap<>();
     private int bodyX,commentX;
+    private String placeholder="";
+    /** How far the text is scrolled up, and where its last line or memo ends, in design pixels. */
+    private float scroll,contentBottom;
 
     public ReadingText(ReadingDocument document) {this(document,List.of(),"");}
 
@@ -65,21 +68,47 @@ public final class ReadingText extends JPanel {
             @Override public void mousePressed(MouseEvent e){if(e.isPopupTrigger() && editing>=0)menu(e,editing);}
             @Override public void mouseReleased(MouseEvent e){if(e.isPopupTrigger() && editing>=0)menu(e,editing);}
         });
-        addMouseListener(new MouseAdapter(){
+        MouseAdapter mouse=new MouseAdapter(){
+            private int pressY;
+            private float pressScroll;
+            private boolean dragged;
             private void popup(MouseEvent e){
                 if(!e.isPopupTrigger())return;
-                for(Memo memo:memos)if(e.getY()/scale>=memo.top && e.getY()/scale<memo.top+memo.height){menu(e,memo.sentence);break;}
+                double y=e.getY()/scale+scroll;
+                for(Memo memo:memos)if(y>=memo.top && y<memo.top+memo.height){menu(e,memo.sentence);break;}
             }
-            @Override public void mousePressed(MouseEvent e){popup(e);}
+            @Override public void mousePressed(MouseEvent e){pressY=e.getY();pressScroll=scroll;dragged=false;popup(e);}
             @Override public void mouseReleased(MouseEvent e){popup(e);}
+            // Dragging up or down moves a text that is longer than the page; so does the wheel.
+            @Override public void mouseDragged(MouseEvent e){
+                double moved=(pressY-e.getY())/scale;
+                if(!dragged && Math.abs(moved)<6)return;
+                dragged=true;scrollTo(pressScroll+(float)moved);
+            }
+            @Override public void mouseWheelMoved(MouseWheelEvent e){
+                scrollTo(scroll+(float)(e.getPreciseWheelRotation()*lineHeight()*3));
+            }
             @Override public void mouseClicked(MouseEvent e){
+                if(dragged)return;
                 if(!SwingUtilities.isLeftMouseButton(e) && e.getButton()!=MouseEvent.NOBUTTON)return;
-                Point2D point=new Point2D.Double(e.getX()/scale-bodyX,e.getY()/scale);
+                Point2D point=new Point2D.Double(e.getX()/scale-bodyX,e.getY()/scale+scroll);
                 int sentence=sentenceAt(point);
                 if(sentence>=0)apply(sentence);
                 else for(Memo memo:memos)if(point.getY()>=memo.top && point.getY()<memo.top+memo.height){edit(memo.sentence);break;}
             }
-        });
+        };
+        addMouseListener(mouse);addMouseMotionListener(mouse);addMouseWheelListener(mouse);
+    }
+    /** How far the text can be scrolled: zero while all of it fits on the page. */
+    public float maxScroll(){return (float)Math.max(0,contentBottom+lineHeight()-getHeight()/scale);}
+    public float scrollOffset(){return scroll;}
+    public void scrollTo(float offset){
+        float next=Math.max(0,Math.min(offset,maxScroll()));
+        if(next==scroll)return;
+        scroll=next;
+        // Only an open memo editor has a place of its own to move; the rest is repainted.
+        if(editing>=0)doLayout();
+        repaint();
     }
     private void menu(MouseEvent event,int sentence){
         JPopupMenu menu=new JPopupMenu();
@@ -106,6 +135,8 @@ public final class ReadingText extends JPanel {
     public void cycleZoom(){zoom=(zoom+1)%3;refresh();}
     public void setDisplayScale(double scale){this.scale=scale;refresh();}
     public void setInsets(int bodyX,int commentX){this.bodyX=bodyX;this.commentX=commentX;}
+    /** Shown in place of the body while the document has no text. */
+    public void setPlaceholder(String text){placeholder=text==null?"":text;repaint();}
     private void rememberName(String text,List<Row> noteRows){
         int end=text.indexOf(' ');
         if(text.startsWith("@") && end>0 && !noteRows.isEmpty())nameLengths.put(noteRows.get(0),end);
@@ -178,10 +209,12 @@ public final class ReadingText extends JPanel {
             if(i!=editing)rememberName(content,noteRows);
             float height=Math.max(lineHeight()*2,noteRows.size()*lineHeight())+8;
             memos.add(new Memo(i,noteRows,y,height));
-            if(i==editing)editor.setBounds((int)Math.round(commentX*scale),(int)Math.round(y*scale),(int)Math.round(327*scale),
-                    (int)Math.ceil(Math.min(height+lineHeight()*2,Math.max(lineHeight()*2,getHeight()/scale-y))*scale));
+            if(i==editing)editor.setBounds((int)Math.round(commentX*scale),(int)Math.round((y-scroll)*scale),(int)Math.round(327*scale),
+                    (int)Math.ceil(Math.min(height+lineHeight()*2,Math.max(lineHeight()*2,getHeight()/scale-(y-scroll)))*scale));
             y+=height;
         }
+        contentBottom=memos.isEmpty() && commentRows.isEmpty()?paragraphBottom:y;
+        scroll=Math.max(0,Math.min(scroll,maxScroll()));
     }
     private Shape segment(Row row,int start,int end){
         Shape shape=row.layout.getLogicalHighlightShape(start-row.start,end-row.start);
@@ -203,8 +236,20 @@ public final class ReadingText extends JPanel {
         Graphics2D g=(Graphics2D)graphics.create();g.scale(scale,scale);
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g.translate(bodyX,0);
+        if(maxScroll()>0){
+            // A thin marker at the right edge shows there is more, and where the page is in it.
+            double page=getHeight()/scale,whole=page+maxScroll();
+            g.setColor(new Color(0,0,0,70));
+            g.fill(new RoundRectangle2D.Double(332,scroll/whole*page,2,page/whole*page,2,2));
+        }
+        g.translate(bodyX,-scroll);
+        if(rows.isEmpty() && !placeholder.isEmpty()){
+            g.setColor(new Color(0x8A8A8A));
+            for(Row row:wrap(placeholder,font(),327,0))row.layout.draw(g,0,row.baseline);
+        }
+        double viewTop=scroll-lineHeight()*2,viewBottom=scroll+getHeight()/scale+lineHeight()*2;
         for(Row row:rows){
+            if(row.baseline<viewTop || row.baseline>viewBottom)continue;
             for(int i=0;i<document.sentences().size();i++){
                 var sentence=document.sentences().get(i);var mark=document.mark(i);
                 int start=Math.max(row.start,sentence.start()),end=Math.min(row.end,sentence.end());
@@ -230,7 +275,7 @@ public final class ReadingText extends JPanel {
         }
         if(!status.isEmpty()){
             g.setColor(new Color(0x9A2929));g.setFont(AppFonts.body(11));
-            g.drawString(status,0,Math.min((float)(getHeight()/scale)-8,paragraphBottom+130));
+            g.drawString(status,0,scroll+Math.min((float)(getHeight()/scale)-8,paragraphBottom-scroll+130));
         }
         g.dispose();
     }

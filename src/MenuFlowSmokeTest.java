@@ -35,7 +35,7 @@ public class MenuFlowSmokeTest {
     private static void require(boolean value,String message){if(!value)throw new AssertionError(message);}
     private static void preview(String name)throws Exception{
         BufferedImage image=new BufferedImage(412,917,2);Graphics2D g=image.createGraphics();app.paint(g);g.dispose();
-        ImageIO.write(image,"png",new File("/tmp/archivefever-"+name+".png"));
+        ImageIO.write(image,"png",new File(System.getProperty("java.io.tmpdir"),"archivefever-"+name+".png"));
     }
     public static void main(String[] args)throws Exception{
         SwingUtilities.invokeAndWait(()->{try{

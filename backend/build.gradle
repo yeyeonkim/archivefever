@@ -1,0 +1,120 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '4.2.0'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'archivefever'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	// Barcode decoding for uploaded back-cover photos.
+	implementation 'com.google.zxing:core:3.5.3'
+	// H2 needs no setup and is the default; MySQL is used when application-local.properties
+	// points the datasource at one (see README).
+	runtimeOnly 'com.h2database:h2'
+	runtimeOnly 'com.mysql:mysql-connector-j'
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	// Tests create and drop their tables. System properties outrank every properties file,
+	// so whatever database application-local.properties names, tests get one in memory.
+	systemProperty 'spring.datasource.url', 'jdbc:h2:mem:test;DB_CLOSE_DELAY=-1'
+	systemProperty 'spring.datasource.username', 'sa'
+	systemProperty 'spring.datasource.password', ''
+}
+
+// ---------------------------------------------------------------------------
+// Swing client for the browser.
+//
+// The Swing sources stay in ../src (an IntelliJ module with no build tool).
+// These tasks compile them for the browser JVM and publish one JAR under
+// build/swing, which the server exposes at /swing/**. IntelliJ's own output
+// (../out) is not reused: it is compiled at a newer language level.
+// ---------------------------------------------------------------------------
+
+def swingSources = file('../src')
+// Entry point packaged into the browser JAR.
+def swingMainClass = 'archivefever.web.WebMain'
+
+tasks.register('compileSwing', JavaCompile) {
+	group = 'swing'
+	description = 'Compiles the Swing client in ../src for the browser JVM.'
+	source = fileTree(swingSources) {
+		include '**/*.java'
+		// Desktop-only test programs; they call System.exit and write preview files.
+		exclude '*SmokeTest.java'
+	}
+	classpath = files()
+	destinationDirectory = layout.buildDirectory.dir('swing-classes')
+	options.release = 17
+	options.encoding = 'UTF-8'
+}
+
+tasks.register('swingJar', Jar) {
+	group = 'swing'
+	description = 'Packages the Swing client and its resources into one JAR.'
+	archiveFileName = 'archivefever.jar'
+	destinationDirectory = layout.buildDirectory.dir('swing-jar')
+	from(tasks.named('compileSwing'))
+	from(swingSources) {
+		include 'resources/**'
+		exclude 'resources/README.md'
+	}
+	manifest {
+		attributes 'Main-Class': swingMainClass
+	}
+}
+
+tasks.register('swingWeb') {
+	group = 'swing'
+	description = 'Publishes the Swing JAR under a content-hashed name with a manifest for the host page.'
+	def jarFile = tasks.named('swingJar').flatMap { it.archiveFile }
+	def webDir = layout.buildDirectory.dir('swing')
+	inputs.file(jarFile)
+	outputs.dir(webDir)
+	doLast {
+		File source = jarFile.get().asFile
+		// A new name per build stops browsers mixing cached byte ranges of an old JAR.
+		String hash = java.security.MessageDigest.getInstance('SHA-256')
+				.digest(source.bytes).encodeHex().toString().substring(0, 12)
+		File dir = webDir.get().asFile
+		dir.deleteDir()
+		dir.mkdirs()
+		String name = "archivefever-${hash}.jar"
+		java.nio.file.Files.copy(source.toPath(), new File(dir, name).toPath())
+		new File(dir, 'manifest.json').setText(groovy.json.JsonOutput.toJson([jar: name]), 'UTF-8')
+	}
+}
+
+tasks.named('bootRun') {
+	dependsOn 'swingWeb'
+}
+
+// The sign-in page (static/index.html) redraws the Swing login screen in HTML. Its artwork
+// and font are taken from the Swing resources here, rather than kept in the repository twice.
+tasks.named('processResources') {
+	from(swingSources) {
+		include 'resources/images/login-*.png'
+		include 'resources/fonts/CormorantGaramond-Bold.ttf'
+		include 'resources/icons/kakao-logo.svg'
+		eachFile { it.path = "static/login/${it.name}" }
+		includeEmptyDirs = false
+	}
+}

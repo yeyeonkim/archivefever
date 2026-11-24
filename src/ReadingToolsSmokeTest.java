@@ -82,7 +82,7 @@ public class ReadingToolsSmokeTest {
                 require(doc.mark(1).underlined(),"Scaled sentence click");
                 panel.setSize(412,917);layout(panel);
                 BufferedImage image=new BufferedImage(412,917,2);Graphics2D g=image.createGraphics();panel.paint(g);g.dispose();
-                ImageIO.write(image,"png",new File("/tmp/archivefever-reading-tools.png"));
+                ImageIO.write(image,"png",new File(System.getProperty("java.io.tmpdir"),"archivefever-reading-tools.png"));
                 System.out.println("PASS: sentence clicks, combined marks, Enter save, persistence, book isolation, zoom cycle, scaled clicks, animated snap");
             }catch(Exception e){throw new RuntimeException(e);}
         });

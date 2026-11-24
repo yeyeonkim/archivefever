@@ -9,6 +9,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /** Exercises the development-data friend and swap flow through real Swing components. */
 public class SocialFlowSmokeTest {
+    /** The swap page slide ignores swipes until it settles; Swing timers tick coarsely on Windows. */
+    private static final int SLIDE_SETTLE_MILLIS=1500;
     private static AppShell app;
     private static JFrame frame;
 
@@ -121,7 +123,7 @@ public class SocialFlowSmokeTest {
 
         click("페이지 1");waitNamed("소년이 온다 기록 열기");
         waitFor("no second page rows",()->named(app,"시지프 신화 기록 열기")==null);
-        Thread.sleep(400);
+        Thread.sleep(SLIDE_SETTLE_MILLIS);
         edt(()->{
             JButton cover=(JButton)named(app,"소년이 온다 기록 열기");
             drag(cover,MouseEvent.MOUSE_PRESSED,200);drag(cover,MouseEvent.MOUSE_DRAGGED,90);drag(cover,MouseEvent.MOUSE_RELEASED,90);
@@ -129,8 +131,8 @@ public class SocialFlowSmokeTest {
         });
         waitNamed("시지프 신화 기록 열기");
         require(edt(()->!app.isReading()),"Swiping across a cover does not open it");
-        Thread.sleep(400);
-        click("페이지 1");waitNamed("소년이 온다 기록 열기");Thread.sleep(400);
+        Thread.sleep(SLIDE_SETTLE_MILLIS);
+        click("페이지 1");waitNamed("소년이 온다 기록 열기");Thread.sleep(SLIDE_SETTLE_MILLIS);
         click("소년이 온다 기록 열기");
         waitFor("swap note",()->app.isReading());
         edt(()->{

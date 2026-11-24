@@ -5,7 +5,7 @@ import archivefever.ui.theme.AppFonts;
 import javax.swing.*;
 import java.awt.event.*;
 
-/** Capture/review UI only; no OCR, fake recognized sentences or persistence. */
+/** Capture/review UI only: reading the page's text and saving sentences is the host's work. */
 public final class SentenceScanPanel extends CameraScanPanel {
     private BookSpine book;
     private boolean captured;
@@ -25,6 +25,11 @@ public final class SentenceScanPanel extends CameraScanPanel {
         captured=true;
         configureAction("save.","문장 저장",AppFonts.typewriter(30),false);
         setActionHint("인식된 문장이 있어야 저장할 수 있어요");
+    }
+    /** After a capture: whether save can be pressed, with a hint saying why not or what to do first. */
+    public void setSaveAvailable(boolean available,String hint){
+        if(!captured)return;
+        configureAction("save.","문장 저장",AppFonts.typewriter(30),available);setActionHint(hint);
     }
     public void reset(){
         book=null;captured=false;

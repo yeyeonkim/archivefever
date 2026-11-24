@@ -15,8 +15,14 @@ src as the source root, so keep resources inside src and retain this layout in
 the compiled output/JAR. Do not mark src/resources as a separate resource root
 without also updating the resource paths.
 
-The login button is a UI prototype: it performs no OAuth and opens a temporary
-main screen. Replace AppShell.onKakaoLogin when backend authentication is ready.
+Without a server the login button lets everyone straight in, on demo data. With one,
+it asks the host to sign the person in (HostBridge.signIn): the desktop asks for a name
+and signs in by it, which the server allows while it has no Kakao key. In the browser the
+web page signs people in (Kakao, or by name) before it starts this UI, hands over the
+name (-Darchivefever.user) and the UI opens on that person's shelf; its own login screen
+is not shown. AppShell.signedIn is the one place both ways arrive at. Logout tells the
+host to end the session (HostBridge.signOut); in the browser that reloads the page into
+its sign-in screen. The profile popup shows the name of whoever is signed in.
 
 ## Main screen and bookmarks
 
@@ -140,3 +146,32 @@ opening a different book starts a fresh capture. No status bars are rendered.
 
 SentenceScanFlowSmokeTest exercises scaled book/scan clicks, book context,
 shutter count, transition/reset and independence from add-book registration.
+
+## Live camera on the phone
+
+When the UI runs inside the phone app (see backend/README.md and mobile/README.md), the
+app draws its live camera picture over the blank display of the camera illustration,
+on both camera screens. CameraScanPanel.DISPLAY is that opening in design coordinates;
+change it together with the camera artwork.
+
+AppShell tells the host when a camera screen comes into view or is left, and when its
+scan button is pressed (HostBridge.showCamera / hideCamera / capturePhoto), so the photo
+is taken at the press. On Add book the photo is then uploaded to the server's scan and the
+confirmation popup shows the book.
+
+On Archive sentence the scan button asks the host for a page photo (HostBridge.capturePage).
+The phone app reads the text on it, on the phone, and lets the reader pick lines on the
+picture. The same button, now "save.", asks the host to save them (HostBridge.savePassage):
+the app shows the picked text and the page number it found for correction, sends them to
+the server, and answers with a PassageResult. Once saved, AppShell opens the book's reading
+page. Back (Escape) on a captured page returns to the camera for another photo.
+
+Connected to the server, the reading page of a shelf book shows the passages collected
+from it in page order, a paragraph each, with a "p.127" line wherever the page changes
+(LibraryController.readingText). ReadingDocument ends a sentence at every line break, so
+each passage and page note is marked on its own, and when the text grows the saved marks
+follow their sentences to their new places. ReadingText scrolls by drag or wheel once the
+text is longer than the page.
+
+On the desktop there is no camera: without a server both screens behave as described
+above, and with one (-Darchivefever.api) save opens a dialog to type the passage in.

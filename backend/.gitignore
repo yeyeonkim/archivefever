@@ -1,0 +1,22 @@
+HELP.md
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### Local configuration and data (never commit API keys) ###
+/application-local.properties
+/data/
+
+### IDEs ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+bin/
+.vscode/
+.classpath
+.project
+.settings
