@@ -64,6 +64,8 @@ class AuthFlowTests {
 				.containsEntry("provider", "dev");
 		String setCookie = signedIn.getHeaders().getFirst(HttpHeaders.SET_COOKIE);
 		assertThat(setCookie).startsWith("AF_SESSION=").contains("HttpOnly").contains("Path=/").contains("Max-Age=2592000");
+		// Reached over plain HTTP, as on the local network: a Secure cookie would never come back.
+		assertThat(setCookie).doesNotContain("Secure");
 		String cookie = setCookie.substring(0, setCookie.indexOf(';'));
 
 		RestClient mina = RestClient.builder().baseUrl("http://localhost:" + port)
