@@ -32,6 +32,23 @@ void main() {
     expect(server.resolve('/api/scans/abc/image').toString(), 'http://192.168.0.10:8080/api/scans/abc/image');
   });
 
+  test('a tunnel address is an https address without a port', () {
+    final server = Server.parse('https://my-name.ngrok-free.dev')!;
+
+    expect(server.toString(), 'https://my-name.ngrok-free.dev');
+    expect(server.resolve('/api/health').toString(), 'https://my-name.ngrok-free.dev/api/health');
+    expect(server.owns(Uri.parse('https://my-name.ngrok-free.dev/auth/kakao/callback?code=x')), isTrue);
+    expect(server.owns(Uri.parse('http://my-name.ngrok-free.dev/')), isFalse);
+    expect(server.owns(Uri.parse('https://kauth.kakao.com/oauth/authorize')), isFalse);
+  });
+
+  test('knows a free ngrok address, which shows browsers a notice first', () {
+    expect(Server.parse('https://my-name.ngrok-free.dev')!.isFreeNgrok, isTrue);
+    expect(Server.parse('https://my-name.ngrok-free.app')!.isFreeNgrok, isTrue);
+    expect(Server.parse('192.168.0.10')!.isFreeNgrok, isFalse);
+    expect(Server.parse('https://ngrok-free.dev.example.com')!.isFreeNgrok, isFalse);
+  });
+
   test('owns tells the server\'s pages from outside links', () {
     final server = Server.parse('192.168.0.10')!;
 

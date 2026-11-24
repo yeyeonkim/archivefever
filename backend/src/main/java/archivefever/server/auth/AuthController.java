@@ -79,12 +79,13 @@ class AuthController {
 	}
 
 	@PostMapping("/api/auth/dev")
-	ResponseEntity<UserView> signInForDevelopment(@RequestBody DevelopmentSignIn request) {
+	ResponseEntity<UserView> signInForDevelopment(HttpServletRequest request, @RequestBody DevelopmentSignIn signIn) {
 		if (!developmentSignIn) {
 			return ResponseEntity.notFound().build();
 		}
-		UserView user = users.signInForDevelopment(request.name());
-		return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, sessionCookie(sessions.start(user.id()))).body(user);
+		UserView user = users.signInForDevelopment(signIn.name());
+		return ResponseEntity.ok()
+				.header(HttpHeaders.SET_COOKIE, sessionCookie(request, sessions.start(user.id()))).body(user);
 	}
 
 	@PostMapping("/api/auth/logout")
@@ -126,7 +127,7 @@ class AuthController {
 			UserView user = users.signInWithKakao(member.id(), member.nickname());
 			return ResponseEntity.status(HttpStatus.FOUND)
 					.header(HttpHeaders.SET_COOKIE, forget)
-					.header(HttpHeaders.SET_COOKIE, sessionCookie(sessions.start(user.id())))
+					.header(HttpHeaders.SET_COOKIE, sessionCookie(request, sessions.start(user.id())))
 					.location(URI.create("/")).build();
 		}
 		catch (KakaoClient.KakaoException exception) {
@@ -145,10 +146,11 @@ class AuthController {
 				.replacePath(KAKAO_PATH + "/callback").replaceQuery(null).build().toUriString();
 	}
 
-	private String sessionCookie(String token) {
-		// Not marked Secure: the server is reached over plain HTTP on the local network.
-		return ResponseCookie.from(SessionFilter.COOKIE, token)
-				.httpOnly(true).path("/").maxAge(sessions.timeToLive()).sameSite("Lax").build().toString();
+	private String sessionCookie(HttpServletRequest request, String token) {
+		// Secure only when the browser came over HTTPS (through a tunnel): on the local
+		// network the server is reached over plain HTTP, where a Secure cookie would be dropped.
+		return ResponseCookie.from(SessionFilter.COOKIE, token).httpOnly(true).secure(request.isSecure())
+				.path("/").maxAge(sessions.timeToLive()).sameSite("Lax").build().toString();
 	}
 
 	private static String expired(String name, String path) {

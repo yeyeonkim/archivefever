@@ -20,6 +20,8 @@ flutter run
 - 폰은 USB 디버깅을 켜고 연결합니다. 노트북과 같은 Wi-Fi여야 합니다.
 - 첫 화면에서 노트북 주소를 입력합니다. 예: `192.168.0.10:8080` (노트북에서 `ipconfig`로 확인)
 - 주소가 맞으면 저장되고, 다음부터는 바로 앱 화면이 뜹니다.
+- 주소를 바꾸려면 뒤로 가기를 한 번 누르고, 아래에 뜨는 안내의 **서버 변경**을 누릅니다.
+- 노트북과 다른 네트워크에서는 ngrok 주소를 `https://` 까지 넣어 입력합니다([backend/README.md](../backend/README.md)의 "다른 네트워크에서 쓰기"). ngrok 무료 주소가 브라우저에 먼저 보여 주는 안내 화면은 앱이 건너뜁니다.
 
 APK만 만들려면 `flutter build apk --debug` 를 실행합니다. 결과물은 `build/app/outputs/flutter-apk/app-debug.apk` 입니다.
 

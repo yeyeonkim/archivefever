@@ -94,9 +94,28 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
         onWebResourceError: (error) {
           if (error.isForMainFrame ?? false) setState(() => _loadError = error.description);
         },
-      ))
-      ..loadRequest(widget.server.base);
+      ));
+    _load();
     _recover();
+  }
+
+  /// Opens the server's page.
+  ///
+  /// A free ngrok address answers every request from a browser, the page's own requests
+  /// for the Swing files and the API included, with a notice page until the visitor presses
+  /// "Visit Site", which sets a cookie. The app sets that cookie itself first: whoever uses
+  /// the app chose this server by typing its address. If ngrok ever changes the cookie,
+  /// the notice shows and pressing its button still works.
+  Future<void> _load() async {
+    if (widget.server.isFreeNgrok) {
+      final host = widget.server.base.host;
+      try {
+        await WebViewCookieManager().setCookie(WebViewCookie(name: 'abuse_interstitial', value: host, domain: host));
+      } on Exception {
+        // The notice page will show instead.
+      }
+    }
+    if (mounted) await _web.loadRequest(widget.server.base);
   }
 
   @override
@@ -390,9 +409,12 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
     _web.runJavaScript('window.hostBack && window.hostBack()').catchError((Object _) {});
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(
-        content: Text('한 번 더 누르면 앱을 종료합니다.'),
-        duration: Duration(seconds: 2),
+      ..showSnackBar(SnackBar(
+        content: const Text('한 번 더 누르면 앱을 종료합니다.'),
+        duration: const Duration(seconds: 3),
+        // The one place to switch servers while the current one still answers: between the
+        // laptop's address at home and its tunnel address elsewhere.
+        action: SnackBarAction(label: '서버 변경', onPressed: _changeServer),
       ));
   }
 
@@ -404,7 +426,7 @@ class _ShellScreenState extends State<ShellScreen> with WidgetsBindingObserver {
 
   void _reload() {
     setState(() => _loadError = null);
-    _web.loadRequest(widget.server.base);
+    _load();
   }
 
   void _changeServer() {

@@ -27,6 +27,10 @@ class Server {
 
   Uri resolve(String path) => base.replace(path: path);
 
+  /// Whether this is a free ngrok address (a tunnel to the laptop, for use away from its
+  /// Wi-Fi). ngrok puts a notice page in front of those for anything that looks like a browser.
+  bool get isFreeNgrok => base.host.endsWith('.ngrok-free.dev') || base.host.endsWith('.ngrok-free.app');
+
   /// Whether [uri] is a page of this server, as opposed to an outside link.
   bool owns(Uri uri) =>
       uri.scheme == base.scheme && uri.host == base.host && uri.port == base.port;

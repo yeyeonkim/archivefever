@@ -127,6 +127,29 @@ class KakaoSignInTests {
 	}
 
 	@Test
+	void behindAnHttpsTunnelKakaoIsGivenThePublicAddress() throws Exception {
+		String[] tunnel = { "X-Forwarded-Proto", "https", "X-Forwarded-Host", "archive.example-tunnel.app",
+				"X-Forwarded-Port", "443" };
+		String callback = "https://archive.example-tunnel.app/auth/kakao/callback";
+
+		HttpResponse<String> start = browser.send(HttpRequest.newBuilder(uri("/auth/kakao/login")).headers(tunnel).GET().build(),
+				HttpResponse.BodyHandlers.ofString());
+		assertThat(query(URI.create(start.headers().firstValue("Location").orElseThrow()))).containsEntry("redirect_uri", callback);
+		String stateCookie = cookie(start, "AF_KAKAO_STATE");
+
+		HttpResponse<String> back = browser.send(HttpRequest.newBuilder(uri("/auth/kakao/callback?code=good-code&state="
+				+ stateCookie.substring(15))).headers(tunnel).header("Cookie", stateCookie).GET().build(),
+				HttpResponse.BodyHandlers.ofString());
+
+		// The code is exchanged with the same public address it was asked for with.
+		assertThat(asked.get(0)).contains("redirect_uri=" + callback + "&");
+		assertThat(back.headers().firstValue("Location")).hasValue("/");
+		// Over HTTPS the session cookie is for HTTPS only.
+		assertThat(back.headers().allValues("Set-Cookie")).anyMatch(value -> value.startsWith("AF_SESSION=")
+				&& value.contains("Secure") && value.contains("HttpOnly"));
+	}
+
+	@Test
 	void theSameKakaoMemberIsTheSameUserNextTime() throws Exception {
 		String first = signIn();
 		nickname = "새 이름";
