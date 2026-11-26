@@ -36,6 +36,8 @@ public final class ReadingText extends JPanel {
     private String placeholder="";
     /** How far the text is scrolled up, and where its last line or memo ends, in design pixels. */
     private float scroll,contentBottom;
+    /** Told which sentence was pressed while no tool was in hand; null when nobody wants to know. */
+    private java.util.function.IntConsumer sentenceAction;
 
     public ReadingText(ReadingDocument document) {this(document,List.of(),"");}
 
@@ -118,15 +120,19 @@ public final class ReadingText extends JPanel {
         menu.add(edit);menu.add(delete);
         menu.show(event.getComponent(),event.getX(),event.getY());
     }
-    /** Says why, when the document takes no more memos, and tells the caller to leave it at that. */
-    private boolean memosClosed(){
-        String why=document.memosClosed();
+    /** Says why, when the document takes no more marks, and tells the caller to leave it at that. */
+    private boolean closed(){
+        String why=document.closed();
         if(why==null)return false;
         status=why;repaint();
         return true;
     }
+    /** Has a press on a sentence, made with no tool in hand, reported: the way to the sentence itself, to correct or delete it. */
+    public void setSentenceAction(java.util.function.IntConsumer action){sentenceAction=action;}
+    /** Shows a line of news about the page where its own notices go, such as that a correction did not get through. */
+    public void showNotice(String message){status=message==null?"":message;repaint();}
     public void deleteMemo(int sentence){
-        if(memosClosed())return;
+        if(closed())return;
         try{
             document.deleteMemo(sentence);drafts.remove(sentence);
             if(editing==sentence){editing=-1;editor.setVisible(false);}
@@ -182,17 +188,19 @@ public final class ReadingText extends JPanel {
     private void refresh(){revalidate();doLayout();repaint();}
     private void stash(){if(editing>=0)drafts.put(editing,editor.getText());}
     private void edit(int sentence){
-        if(memosClosed())return;
+        if(closed())return;
         stash();editing=sentence;
         editor.setText(drafts.getOrDefault(sentence,document.mark(sentence).note()));
         editor.setVisible(true);refresh();editor.requestFocusInWindow();
     }
     private void apply(int sentence){
+        if(tool==Tool.NONE){if(sentenceAction!=null)sentenceAction.accept(sentence);return;}
+        if(closed())return;
         try{
             switch(tool){
                 case PENCIL->document.underline(sentence);
                 case HIGHLIGHTER->document.highlight(sentence);
-                case PEN->{if(memosClosed())return;document.enableMemo(sentence);edit(sentence);}
+                case PEN->{document.enableMemo(sentence);edit(sentence);}
                 case NONE->{return;}
             }
             status="";refresh();

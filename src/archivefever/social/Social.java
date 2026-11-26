@@ -53,15 +53,15 @@ public interface Social {
     Notice answer(Notice notice,boolean accept) throws IOException;
 
     /**
-     * The note store of a record kept from a swap that ended with the friendship: the
-     * record can be read, and takes no more memos.
+     * The mark store of a record kept from a swap that ended with the friendship: the
+     * record can be read, and takes no more marks.
      */
-    static ReadingDocument.NoteStore keptRecord() {
-        return new ReadingDocument.NoteStore() {
-            @Override public void save(int sentence,String note) throws IOException {
+    static ReadingDocument.MarkStore keptRecord() {
+        return new ReadingDocument.MarkStore() {
+            @Override public void save(int sentence,ReadingDocument.Mark mark) throws IOException {
                 throw new IOException("this swap has ended");
             }
-            @Override public String closed() {return "끝난 교환독서의 기록이에요. 메모는 더 쓸 수 없어요.";}
+            @Override public String closed() {return "끝난 교환독서의 기록이에요. 더 표시하거나 쓸 수 없어요.";}
         };
     }
 }

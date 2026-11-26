@@ -171,8 +171,10 @@ public final class ReadingPanel extends JPanel {
         }
 
         private void selectTool(ReadingText.Tool tool,int index){
-            readingText.setTool(tool);
-            for(int i:new int[]{0,2,3})stationery.get(i).setActive(i==index);
+            // Pressing the tool in hand puts it down. With no tool, a press on a sentence is for the sentence itself.
+            boolean putDown=readingText.tool()==tool;
+            readingText.setTool(putDown?ReadingText.Tool.NONE:tool);
+            for(int i:new int[]{0,2,3})stationery.get(i).setActive(!putDown && i==index);
         }
 
         Dimension designSize() {

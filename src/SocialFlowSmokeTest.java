@@ -163,7 +163,7 @@ public class SocialFlowSmokeTest {
             ReadingText text=((ReadingPanel)frame.getContentPane()).readingText();
             text.setTool(ReadingText.Tool.PEN);
             text.dispatchEvent(new MouseEvent(text,MouseEvent.MOUSE_CLICKED,System.currentTimeMillis(),0,40,7,1,false,MouseEvent.BUTTON1));
-            return text.document().memosClosed()!=null && !text.memoEditor().isVisible();
+            return text.document().closed()!=null && !text.memoEditor().isVisible();
         }),"A record kept from an ended swap takes no more memos");
         edt(()->{((JButton)named(frame.getContentPane(),"return to archive")).doClick(0);return true;});
         require(edt(()->!app.isReading() && app.currentDestination()==Destination.BOOK_SWAP),"Return from a kept record stays on Book swap");

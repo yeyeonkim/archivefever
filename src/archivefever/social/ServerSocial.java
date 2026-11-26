@@ -7,6 +7,7 @@ import archivefever.model.BookSpine;
 import archivefever.model.BookSwap;
 import archivefever.model.Friend;
 import archivefever.model.Notice;
+import archivefever.model.PassagePage;
 import archivefever.model.ReadingDocument;
 import archivefever.model.SwapRecord;
 import java.awt.image.BufferedImage;
@@ -130,58 +131,44 @@ public final class ServerSocial implements Social {
 
     /**
      * Lays both readers' passages out as one text, each under a line saying its page and
-     * whose it is, and ties the memos to the sentences of that text.
-     * @param kept whether this is the record of a swap that has ended, which takes no more memos
+     * whose it is, and ties the marks to the sentences of that text: the user's own as the
+     * document's marks, kept on the server as they are made, the friend's memos as comments.
+     * @param kept whether this is the record of a swap that has ended, which takes no more marks
      */
     private SwapRecord record(String swapId,boolean kept,Object records) {
         String me="@"+Json.string(Json.field(records,"me"),"handle");
-        StringBuilder text=new StringBuilder();
-        // Where each passage's own words are in the text, to tell which passage a sentence is of.
-        List<long[]> passages=new ArrayList<>();
+        List<PassagePage.Passage> passages=new ArrayList<>();
         for(Object passage:Json.list(Json.field(records,"passages"))) {
-            if(text.length()>0)text.append("\n\n");
-            Object page=Json.field(passage,"page");
-            text.append(page instanceof Number number?"p."+number.intValue()+" · ":"").append('@')
-                    .append(Json.string(passage,"by")).append('\n');
-            int start=text.length();
-            text.append(Json.string(passage,"text"));
-            passages.add(new long[]{((Number)Json.field(passage,"id")).longValue(),start,text.length()});
+            Integer page=Json.field(passage,"page") instanceof Number number?number.intValue():null;
+            passages.add(new PassagePage.Passage(((Number)Json.field(passage,"id")).longValue(),page,
+                    (page==null?"":"p."+page+" · ")+"@"+Json.string(passage,"by"),Json.string(passage,"text")));
         }
-        // A memo is kept by passage and by sentence within it; the page numbers sentences through the whole text.
-        List<ReadingDocument.Sentence> sentences=ReadingDocument.sentencesOf(text.toString());
-        long[] passageOf=new long[sentences.size()];
-        int[] placeIn=new int[sentences.size()];
-        Map<String,Integer> sentenceAt=new HashMap<>();
-        for(int i=0;i<sentences.size();i++) {
-            passageOf[i]=-1;
-            for(long[] passage:passages) {
-                if(sentences.get(i).start()<passage[1] || sentences.get(i).start()>=passage[2])continue;
-                passageOf[i]=passage[0];
-                placeIn[i]=i>0 && passageOf[i-1]==passage[0]?placeIn[i-1]+1:0;
-                sentenceAt.put(passage[0]+"/"+placeIn[i],i);
-            }
-        }
-        Map<Integer,String> mine=new HashMap<>();
+        PassagePage page=new PassagePage(passages);
+        Map<Integer,ReadingDocument.Mark> mine=new HashMap<>();
         Map<Integer,List<String>> theirs=new TreeMap<>();
         for(Object note:Json.list(Json.field(records,"notes"))) {
-            Integer at=sentenceAt.get(((Number)Json.field(note,"passageId")).longValue()+"/"+Json.integer(note,"sentence"));
-            String words=Json.string(note,"text");
+            Integer at=page.sentenceAt(((Number)Json.field(note,"passageId")).longValue(),Json.integer(note,"sentence"));
+            String words=Json.string(note,"text")==null?"":Json.string(note,"text");
+            boolean own=Boolean.TRUE.equals(Json.field(note,"mine"));
+            if(own && at!=null)mine.put(at,new ReadingDocument.Mark(Boolean.TRUE.equals(Json.field(note,"underlined")),
+                    Boolean.TRUE.equals(Json.field(note,"highlighted")),!words.isEmpty(),words));
             // A memo whose sentence cannot be found any more is still shown, below the others.
-            if(Boolean.TRUE.equals(Json.field(note,"mine")) && at!=null)mine.put(at,words);
-            else theirs.computeIfAbsent(at==null?Integer.MAX_VALUE:at,key->new ArrayList<>())
+            else if(!words.isEmpty())theirs.computeIfAbsent(at==null?Integer.MAX_VALUE:at,key->new ArrayList<>())
                     .add("@"+Json.string(note,"by")+" : "+words);
         }
         List<String> comments=new ArrayList<>();
         theirs.values().forEach(comments::addAll);
-        ReadingDocument.NoteStore store=kept?Social.keptRecord():(sentence,words)->{
-            if(passageOf[sentence]<0)throw new IOException("no passage here");
+        ReadingDocument.MarkStore store=kept?Social.keptRecord():(sentence,mark)->{
+            PassagePage.Passage passage=page.passageOf(sentence);
+            if(passage==null)throw new IOException("no passage here");
             ask(()->{
-                client.postForNothing("/api/swaps/"+encoded(swapId)+"/notes","{\"passageId\":"+passageOf[sentence]
-                        +",\"sentence\":"+placeIn[sentence]+",\"text\":"+Json.quote(words)+"}");
+                client.postForNothing("/api/swaps/"+encoded(swapId)+"/notes","{\"passageId\":"+passage.id()
+                        +",\"sentence\":"+page.placeIn(sentence)+",\"underlined\":"+mark.underlined()
+                        +",\"highlighted\":"+mark.highlighted()+",\"text\":"+Json.quote(mark.note())+"}");
                 return null;
             });
         };
-        return new SwapRecord(new ReadingDocument("swap-"+swapId,text.toString(),mine,store),comments,me,EMPTY_RECORD);
+        return new SwapRecord(new ReadingDocument("swap-"+swapId,page.text(),mine,store),comments,me,EMPTY_RECORD);
     }
 
     private List<BookSpine> spines(String path) throws IOException {
