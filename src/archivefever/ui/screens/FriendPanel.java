@@ -51,8 +51,13 @@ public final class FriendPanel extends SocialPanel {
         search.getAccessibleContext().setAccessibleName("친구 검색어");
         search.addActionListener(e->runSearch());
         search.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            public void insertUpdate(javax.swing.event.DocumentEvent e) {searchTimer.restart();repaint();}
-            public void removeUpdate(javax.swing.event.DocumentEvent e) {searchTimer.restart();repaint();}
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {typed();}
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {typed();}
+            // The typewriter face has no Korean letters: a Korean name typed in it would not show.
+            private void typed() {
+                search.setFont(korean(search.getText())?AppFonts.body(18):typewriter(20));
+                searchTimer.restart();repaint();
+            }
             public void changedUpdate(javax.swing.event.DocumentEvent e) {repaint();}
         });
         searchTimer.setRepeats(false);
