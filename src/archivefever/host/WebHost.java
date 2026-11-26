@@ -69,6 +69,15 @@ public final class WebHost implements HostBridge {
         post("{\"type\":\"savePassage\",\"request\":"+request+",\"isbn13\":"+Json.quote(isbn13)+"}");
     }
 
+    /** The page shows a form of its own for this: its text boxes get the phone's keyboard, and it saves through its session. */
+    @Override public void editPassage(String isbn13,long id,Integer page,String text,Consumer<PassageResult> done) {
+        int request=++lastRequest;
+        waiting.put(request,done);
+        listenForReplies();
+        post("{\"type\":\"editPassage\",\"request\":"+request+",\"isbn13\":"+Json.quote(isbn13)+",\"id\":"+id
+                +",\"page\":"+page+",\"text\":"+Json.quote(text)+"}");
+    }
+
     /**
      * In the browser the page signs people in before it starts this UI, so the UI's own
      * login screen is only reached after signing out. Both ways lead back to the page's.

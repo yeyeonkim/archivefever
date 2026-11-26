@@ -16,7 +16,9 @@ public interface HostBridge {
         CANCELLED,
         FAILED,
         /** This host cannot collect passages. */
-        UNAVAILABLE
+        UNAVAILABLE,
+        /** The reader chose to delete the passage they were asked to correct, and it is gone. */
+        DELETED
     }
 
     /**
@@ -54,6 +56,17 @@ public interface HostBridge {
      * @param done told how it ended, on the event thread
      */
     default void savePassage(String isbn13,Consumer<PassageResult> done) {done.accept(PassageResult.UNAVAILABLE);}
+
+    /**
+     * Lets the reader correct a passage they collected, its text and its page, or delete
+     * it, and has the change saved. Typing is the host's work because it has the keyboard:
+     * the phone's own, with its input methods. Returns at once.
+     * @param page the passage's page as it is now; null when it has none
+     * @param done told how it ended, on the event thread: SAVED, DELETED, CANCELLED or FAILED
+     */
+    default void editPassage(String isbn13,long id,Integer page,String text,Consumer<PassageResult> done) {
+        done.accept(PassageResult.UNAVAILABLE);
+    }
 
     /**
      * Signs the person in, in whatever way this host can, and reports the name they go by.

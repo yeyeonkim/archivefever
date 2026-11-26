@@ -13,6 +13,7 @@ import archivefever.model.BookSpine;
 import archivefever.ui.components.BookSelectionPopup;
 import archivefever.ui.components.NotificationPopup;
 import archivefever.ui.components.ProfilePopup;
+import archivefever.ui.components.ReadingText;
 import archivefever.ui.screens.*;
 import archivefever.ui.components.BookmarkNavigation;
 import archivefever.ui.theme.AppTheme;
@@ -28,6 +29,9 @@ public final class AppShell extends JPanel {
     private final ProfilePopup profilePopup;
     private final MenuPanel menuPanel;
     private final AddBookPanel addBookPanel;
+    private final BookSearchPanel bookSearchPanel;
+    /** Whether the search by title is showing in the add-book screen's place. */
+    private boolean bookSearching;
     private final SentenceScanPanel sentenceScanPanel;
     private final ScanConfirmationPopup scanPopup;
     private final DemoSocial demoSocial=new DemoSocial(250,DemoBooks.load());
@@ -79,8 +83,12 @@ public final class AppShell extends JPanel {
             if(loggedIn && currentDestination==Destination.MENU)this.editSound.run();
         });
         content.add(menuPanel,Destination.MENU.name());
-        addBookPanel=new AddBookPanel(this::scanBook);
+        addBookPanel=new AddBookPanel(this::scanBook,this::openBookSearch);
         content.add(addBookPanel,Destination.ADD_BOOK.name());
+        bookSearchPanel=new BookSearchPanel(()->navigate(Destination.ADD_BOOK),this::offerFoundBook,
+                ()->{if(library!=null)library.openCatalogue();});
+        bookSearchPanel.setSource(this::searchDemoBooks);
+        content.add(bookSearchPanel,"book-search");
         sentenceScanPanel=new SentenceScanPanel(this::captureSentence,this::leaveSentenceScan);
         content.add(sentenceScanPanel,"sentence-scan");
         friendPanel=new FriendPanel(demoSocial,choicePopup,this::showRequestedSwap);
@@ -95,7 +103,8 @@ public final class AppShell extends JPanel {
         navigation=new BookmarkNavigation(this::navigate);
         navigation.setBounds(0,750,412,167);navigation.setVisible(false);
         add(navigation,0);
-        selectionPopup=new BookSelectionPopup(this::openReading,this::openSentenceScan,this::dismissBookSelection);
+        selectionPopup=new BookSelectionPopup(this::openReading,this::openSentenceScan,this::askRemoveBook,
+                this::dismissBookSelection);
         selectionPopup.setBounds(0,0,412,917);selectionPopup.setVisible(false);
         add(selectionPopup,0);
         notificationPopup=new NotificationPopup(this::dismissMenuPopups,this.notificationSound);
@@ -117,6 +126,7 @@ public final class AppShell extends JPanel {
         if(!loggedIn) return;
         dismissMenuPopups();dismissScanConfirmation();selectionPopup.setVisible(false);menuPanel.resetHover();
         sentenceScanPanel.reset();readingRequest=null;
+        bookSearching=false;bookSearchPanel.reset();
         currentDestination=destination;
         screens.show(content,destination.name());
         if(destination==Destination.FRIEND)friendPanel.reload();
@@ -162,14 +172,45 @@ public final class AppShell extends JPanel {
         if(library!=null)library.cancel();
         boolean reviewing=scanPopup.isVisible();
         scanPopup.setVisible(false);addBookPanel.setReviewing(false);repaint();
-        // Back from reviewing a scan to the camera screen: the live preview returns.
-        if(reviewing && library!=null && currentDestination==Destination.ADD_BOOK)library.cameraScreen(true);
+        // Back from reviewing a scan to the camera screen: the live preview returns. The search has no camera.
+        if(reviewing && library!=null && currentDestination==Destination.ADD_BOOK && !bookSearching)library.cameraScreen(true);
+    }
+    /** The other way to add a book: by its title, for a book whose barcode is not to hand. */
+    private void openBookSearch(){
+        if(!loggedIn || currentDestination!=Destination.ADD_BOOK || scanPopup.isVisible())return;
+        bookSearching=true;
+        screens.show(content,"book-search");
+        bookSearchPanel.open();repaint();
+        if(library!=null)library.cameraScreen(false);
+    }
+    /** A book picked from the search goes the way a scanned one does: shown, then confirmed onto the shelf. */
+    private void offerFoundBook(BookSearchPanel.Found found){
+        if(!bookSearching || scanPopup.isVisible())return;
+        scanPopup.resetResult();
+        scanPopup.setVisible(true);scanPopup.requestFocusInWindow();repaint();
+        if(library!=null)library.offerFound(found.isbn13());
+    }
+    /** Without a server there is no catalogue: the search finds among the demo books, all of them on the shelf already. */
+    private java.util.List<BookSearchPanel.Found> searchDemoBooks(String words){
+        String wanted=words.toLowerCase(java.util.Locale.ROOT);
+        return DemoBooks.load().stream().filter(book->book.title().toLowerCase(java.util.Locale.ROOT).contains(wanted))
+                .map(book->new BookSearchPanel.Found(book.id(),book.title(),"","",true)).toList();
+    }
+    private void askRemoveBook(BookSpine book){
+        selectionPopup.setVisible(false);
+        choicePopup.ask("remove this book?","수집한 문장과 밑줄·메모도 함께 지워져요.","yes","no",()->removeBook(book),null);
+    }
+    private void removeBook(BookSpine book){
+        if(library!=null){library.removeBook(book,mainPanel::showNotice);return;}
+        // On demo data the book just leaves the shelf.
+        mainPanel.setBooks(mainPanel.books().stream().filter(other->!other.id().equals(book.id())).toList());
     }
     /** Runs the add-book flow and the shelf against the server; without this they stay on demo data. */
     public void connect(LibraryController controller){
         library=controller;
         controller.bind(mainPanel,scanPopup,()->{dismissScanConfirmation();navigate(Destination.ARCHIVE);});
         controller.bindSentences(sentenceScanPanel,this::showCollected);
+        bookSearchPanel.setSource(controller::findBooks);
     }
     /** Runs friends, book swaps and notifications against the server; without this they stay on demo data. */
     public void connectSocial(Social server){
@@ -327,11 +368,26 @@ public final class AppShell extends JPanel {
         library.loadReading(book,reading->{
             if(readingRequest!=book)return;
             readingRequest=null;
-            ReadingPanel panel=new ReadingPanel(book.id(),book.title(),reading.author(),reading.text(),
+            ReadingPanel panel=new ReadingPanel(reading.document(),book.title(),reading.author(),
                     java.util.List.of(),"",this::returnToArchive);
-            panel.readingText().setPlaceholder(reading.notice());
-            showReading(panel);
+            ReadingText text=panel.readingText();
+            text.setPlaceholder(reading.notice());
+            // With no tool in hand, a press on a sentence is for the passage itself: to correct it, or delete it.
+            // Either way the page is then read again from the server.
+            text.setSentenceAction(sentence->library.editPassage(book,reading.page(),sentence,()->openReading(book),text::showNotice));
+            if(readingPanel==null)showReading(panel);else replaceReading(panel);
         });
+    }
+
+    /** Puts a page read afresh in the place of the one showing, as after a passage on it was corrected. */
+    private void replaceReading(ReadingPanel next) {
+        JFrame frame=readingFrame;
+        next.setExpandedMode(readingPanel.isExpandedMode());
+        readingPanel.finishTransition();
+        readingPanel=next;
+        frame.setContentPane(next);
+        frame.revalidate();
+        frame.repaint();
     }
 
     private void showReading(ReadingPanel panel) {
@@ -353,6 +409,8 @@ public final class AppShell extends JPanel {
 
     private void returnToArchive() {
         if(readingFrame==null) return;
+        // A page being read again for this screen has nowhere to go any more.
+        readingRequest=null;
         JFrame frame=readingFrame;
         if(readingTransition!=null){readingTransition.stop();readingTransition=null;}
         readingPanel.finishTransition();

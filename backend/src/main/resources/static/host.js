@@ -33,10 +33,13 @@ function fail(message, error) {
 //   {"type":"savePassage","request":3,"isbn13":"..."}
 //                                    save the text the reader picked on the page photo;
 //                                    answered through window.hostReply (below)
+//   {"type":"editPassage","request":4,"isbn13":"...","id":7,"page":12,"text":"..."}
+//                                    let the reader correct a collected passage or delete it;
+//                                    answered through window.hostReply
 //   {"type":"signOut"}               end the session and go back to the sign-in screen
 // Inside the Flutter app a JavaScript channel named "Bridge" receives them. In a plain
 // browser (development on a laptop) the page does the same jobs itself, as far as it can.
-// Signing out is the page's own job in both.
+// Signing out and correcting a passage are the page's own jobs in both.
 
 function fromSwing(json) {
   let message;
@@ -53,6 +56,8 @@ function fromSwing(json) {
   }
   if (message.type === 'signOut') {
     signOut();
+  } else if (message.type === 'editPassage') {
+    editPassage(message).then((outcome) => window.hostReply(message.request, outcome));
   } else if (window.Bridge && typeof window.Bridge.postMessage === 'function') {
     window.Bridge.postMessage(json);
   } else if (message.type === 'scan') {
@@ -64,8 +69,90 @@ function fromSwing(json) {
   }
 }
 
-// How a savePassage request ended; the numbers are the order of HostBridge.PassageResult.
-const SAVED = 0, NOTHING_PICKED = 1, CANCELLED = 2, FAILED = 3;
+// How a savePassage or editPassage request ended; the numbers are the order of HostBridge.PassageResult.
+const SAVED = 0, NOTHING_PICKED = 1, CANCELLED = 2, FAILED = 3, DELETED = 5;
+
+// --- Correcting a collected passage ---------------------------------------------------
+
+const passageEdit = document.getElementById('passage-edit');
+const passageForm = document.getElementById('passage-form');
+const passageText = document.getElementById('passage-text');
+const passagePage = document.getElementById('passage-page');
+const passageMessage = document.getElementById('passage-edit-message');
+const passageDelete = document.getElementById('passage-delete');
+const passageCancel = document.getElementById('passage-cancel');
+const passageSave = document.getElementById('passage-save');
+
+// Shows the form with the passage as it is and resolves with how it ended: SAVED, DELETED
+// or CANCELLED. A change the server will not take keeps the form open with what was typed,
+// to be tried again; so the form itself never ends in failure.
+function editPassage(message) {
+  return new Promise((resolve) => {
+    const address = '/api/library/books/' + encodeURIComponent(message.isbn13) + '/passages/' + message.id;
+    let sureToDelete = false;
+    const say = (text) => {
+      passageMessage.textContent = text;
+      passageMessage.hidden = !text;
+    };
+    const busy = (now) => {
+      for (const button of [passageDelete, passageCancel, passageSave]) button.disabled = now;
+    };
+    const finish = (outcome) => {
+      passageEdit.hidden = true;
+      passageText.blur();
+      passagePage.blur();
+      // In the phone app losing focus alone leaves the keyboard up; the app hides it when told this.
+      if (window.Bridge && typeof window.Bridge.postMessage === 'function') {
+        window.Bridge.postMessage(JSON.stringify({ type: 'signedIn' }));
+      }
+      resolve(outcome);
+    };
+    const send = async (method, body) => {
+      busy(true);
+      try {
+        const response = await fetch(address, {
+          method,
+          headers: body ? { 'Content-Type': 'application/json' } : {},
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        return response.ok;
+      } catch (error) {
+        console.error('[host] changing the passage failed', error);
+        return false;
+      } finally {
+        busy(false);
+      }
+    };
+
+    passageText.value = message.text;
+    passagePage.value = message.page == null ? '' : String(message.page);
+    passageDelete.textContent = '삭제';
+    say('');
+    busy(false);
+    passageEdit.hidden = false;
+
+    passageForm.onsubmit = async (event) => {
+      event.preventDefault();
+      const text = passageText.value.trim();
+      const page = passagePage.value.trim();
+      if (text === '') return say('문장을 비워 둘 수는 없어요. 지우려면 삭제를 눌러 주세요.');
+      if (page !== '' && !(/^\d{1,4}$/.test(page) && Number(page) >= 1)) return say('쪽수는 1부터 9999까지의 숫자예요.');
+      if (await send('PUT', { page: page === '' ? null : Number(page), text })) finish(SAVED);
+      else say('저장하지 못했어요. 다시 눌러 주세요.');
+    };
+    passageDelete.onclick = async () => {
+      // Deleting cannot be taken back, so it takes two presses.
+      if (!sureToDelete) {
+        sureToDelete = true;
+        passageDelete.textContent = '정말 삭제';
+        return say('이 문장과 여기에 남긴 밑줄·메모가 지워져요. 지우려면 한 번 더 눌러 주세요.');
+      }
+      if (await send('DELETE')) finish(DELETED);
+      else say('지우지 못했어요. 다시 눌러 주세요.');
+    };
+    passageCancel.onclick = () => finish(CANCELLED);
+  });
+}
 
 // A plain browser has no camera preview to pick lines on: the passage is typed in.
 async function typePassageInBrowser(isbn13) {
@@ -134,6 +221,11 @@ function pickPhotoInBrowser(scanId) {
 // The phone's Back button. The Swing UI has no "back", but Escape closes whatever popup
 // it has open, so the app calls this instead of leaving the page.
 window.hostBack = function () {
+  // With the passage form open, Back closes the form.
+  if (!passageEdit.hidden) {
+    passageCancel.click();
+    return;
+  }
   const target = document.activeElement || document.body;
   for (const type of ['keydown', 'keyup']) {
     target.dispatchEvent(new KeyboardEvent(type, {

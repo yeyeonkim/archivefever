@@ -14,6 +14,8 @@ public final class MainPanel extends JPanel {
     private final BufferedImage wallpaper=AppTheme.image("images/login-wallpaper.png");
     private final BufferedImage wood=AppTheme.image("images/login-wood.png");
     private final Bookshelf bookshelf;
+    private final JLabel notice=new JLabel("",SwingConstants.CENTER);
+    private final Timer noticeTimer=new Timer(3500,e->{notice.setVisible(false);repaint();});
 
     public MainPanel(List<BookSpine> books, Consumer<BookSpine> onBookSelected) {
         setLayout(null);setBackground(AppColors.WALL);
@@ -22,9 +24,22 @@ public final class MainPanel extends JPanel {
         title.setBounds(30,25,352,45);add(title);
         bookshelf=new Bookshelf(books,onBookSelected);
         bookshelf.setBounds(17,72,377,749);add(bookshelf);
+        notice.setFont(AppFonts.body(14));notice.setForeground(new Color(0x9B2D20));
+        notice.setOpaque(true);notice.setBackground(new Color(0xF6F1E7));
+        notice.setBorder(BorderFactory.createLineBorder(AppColors.LIGHT_BROWN));
+        notice.getAccessibleContext().setAccessibleName("책장 안내");
+        notice.setBounds(51,636,311,40);notice.setVisible(false);add(notice,0);
+        noticeTimer.setRepeats(false);
     }
 
     public void setBooks(List<BookSpine> books) {bookshelf.setBooks(books);}
+
+    public List<BookSpine> books() {return bookshelf.books();}
+
+    /** Tells the reader something about the shelf for a few seconds, such as why a book could not be taken off it. */
+    public void showNotice(String message) {
+        notice.setText(message);notice.setVisible(true);noticeTimer.restart();repaint();
+    }
 
     @Override protected void paintComponent(Graphics graphics) {
         super.paintComponent(graphics);

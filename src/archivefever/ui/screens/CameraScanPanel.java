@@ -23,7 +23,12 @@ public class CameraScanPanel extends JPanel {
         setLayout(null);setBackground(Color.BLACK);
         title.setText(heading);
         title.setBounds(20,25,372,45);title.setFont(AppFonts.heading(36));title.setForeground(AppColors.BROWN);add(title);
-        JButton scan=new JButton("scan."){
+        JButton scan=textAction("scan.",accessibleName,onScan);
+        primaryAction=scan;scan.setBounds(150,716,96,48);add(scan);
+    }
+    /** An underlined word under the camera that does something when pressed, as "scan." does. */
+    protected static JButton textAction(String text,String accessibleName,Runnable action){
+        JButton button=new JButton(text){
             @Override protected void paintComponent(Graphics graphics){
                 Graphics2D g=(Graphics2D)graphics.create();
                 g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -37,12 +42,13 @@ public class CameraScanPanel extends JPanel {
                 g.dispose();
             }
         };
-        primaryAction=scan;scan.setFont(AppFonts.headingRegular(30));
-        scan.setBounds(150,716,96,48);scan.setOpaque(false);scan.setBorder(null);
-        scan.setContentAreaFilled(false);scan.setFocusPainted(false);
-        scan.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        scan.getAccessibleContext().setAccessibleName(accessibleName);
-        scan.addActionListener(e->onScan.run());add(scan);
+        button.setFont(AppFonts.headingRegular(30));
+        button.setOpaque(false);button.setBorder(null);
+        button.setContentAreaFilled(false);button.setFocusPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.getAccessibleContext().setAccessibleName(accessibleName);
+        button.addActionListener(e->action.run());
+        return button;
     }
     protected void setHeading(String heading,Color color){title.setText(heading);title.setForeground(color);}
     protected void configureAction(String text,String name,Font font,boolean enabled){

@@ -26,6 +26,8 @@ public final class Bookshelf extends JPanel {
         setBooks(books);
     }
 
+    public List<BookSpine> books() {return books;}
+
     public void setBooks(List<BookSpine> books) {
         if (!SwingUtilities.isEventDispatchThread())
             throw new IllegalStateException("Update Swing on the EDT");

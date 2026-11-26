@@ -74,6 +74,38 @@ public final class DesktopHost implements HostBridge {
         worker.setDaemon(true);worker.start();
     }
 
+    @Override public void editPassage(String isbn13,long id,Integer page,String text,Consumer<PassageResult> done) {
+        JTextArea words=new JTextArea(text,6,30);
+        words.setLineWrap(true);words.setWrapStyleWord(true);
+        JTextField number=new JTextField(page==null?"":page.toString(),5);
+        JPanel pageRow=new JPanel(new FlowLayout(FlowLayout.LEFT,0,0));
+        pageRow.add(new JLabel("쪽수 (비워 둘 수 있음)  "));pageRow.add(number);
+        JPanel form=new JPanel(new BorderLayout(0,8));
+        form.add(new JScrollPane(words),BorderLayout.CENTER);form.add(pageRow,BorderLayout.SOUTH);
+        String[] choices={"저장","삭제","취소"};
+        int chosen=JOptionPane.showOptionDialog(null,form,"수집한 문장 고치기",JOptionPane.DEFAULT_OPTION,
+                JOptionPane.PLAIN_MESSAGE,null,choices,choices[0]);
+        if(chosen==1 && JOptionPane.showConfirmDialog(null,"이 문장과 여기에 남긴 밑줄·메모를 지울까요?","문장 삭제",
+                JOptionPane.OK_CANCEL_OPTION,JOptionPane.WARNING_MESSAGE)!=JOptionPane.OK_OPTION)chosen=2;
+        if(chosen!=0 && chosen!=1) {done.accept(PassageResult.CANCELLED);return;}
+        boolean delete=chosen==1;
+        Integer newPage;
+        try {newPage=number.getText().isBlank()?null:Integer.valueOf(number.getText().strip());}
+        catch(NumberFormatException e) {done.accept(PassageResult.FAILED);return;}
+        String corrected=words.getText().strip();
+        if(!delete && corrected.isEmpty()) {done.accept(PassageResult.NOTHING_PICKED);return;}
+        Thread worker=new Thread(()->{
+            PassageResult result;
+            try {
+                if(delete)api.deletePassage(isbn13,id);else api.updatePassage(isbn13,id,newPage,corrected);
+                result=delete?PassageResult.DELETED:PassageResult.SAVED;
+            } catch(IOException | RuntimeException e) {result=PassageResult.FAILED;}
+            PassageResult outcome=result;
+            SwingUtilities.invokeLater(()->done.accept(outcome));
+        },"desktop-passage-edit");
+        worker.setDaemon(true);worker.start();
+    }
+
     @Override public void signIn(Consumer<String> done) {
         String typed=JOptionPane.showInputDialog(null,
                 "로그인할 이름 (영문 소문자·숫자 2~20자)",

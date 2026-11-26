@@ -57,12 +57,16 @@ public final class ApiClient {
     }
 
     public Object post(String path,String json) throws IOException {
-        return Json.parse(text(read(send(path,json))));
+        return Json.parse(text(read(send(path,"POST",json))));
     }
 
-    private HttpURLConnection send(String path,String json) throws IOException {
+    public Object put(String path,String json) throws IOException {
+        return Json.parse(text(read(send(path,"PUT",json))));
+    }
+
+    private HttpURLConnection send(String path,String method,String json) throws IOException {
         byte[] body=json.getBytes(StandardCharsets.UTF_8);
-        HttpURLConnection connection=open(path,"POST");
+        HttpURLConnection connection=open(path,method);
         connection.setDoOutput(true);
         connection.setRequestProperty("Content-Type","application/json");
         connection.setFixedLengthStreamingMode(body.length);
@@ -81,11 +85,16 @@ public final class ApiClient {
 
     /** POST of JSON whose answer has no content, such as saving a memo. */
     public void postForNothing(String path,String json) throws IOException {
-        read(send(path,json));
+        read(send(path,"POST",json));
     }
 
     public Object delete(String path) throws IOException {
         return Json.parse(text(read(open(path,"DELETE"))));
+    }
+
+    /** DELETE whose answer has no content, such as taking a book off the shelf. */
+    public void deleteForNothing(String path) throws IOException {
+        read(open(path,"DELETE"));
     }
 
     public Object postFile(String path,String field,String filename,byte[] content) throws IOException {
