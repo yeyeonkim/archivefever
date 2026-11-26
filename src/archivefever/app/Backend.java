@@ -5,15 +5,21 @@ import archivefever.api.LibraryApi;
 import archivefever.host.DesktopHost;
 import archivefever.host.HostBridge;
 import archivefever.host.WebHost;
+import archivefever.social.ServerSocial;
 import archivefever.ui.navigation.AppShell;
 import java.util.function.Function;
 
-/** Connects the UI to the server when one is configured; otherwise the UI stays on demo data. */
+/**
+ * Connects the UI to the server when one is configured: the shelf, collected passages,
+ * friends, book swaps and notifications. Otherwise the UI stays on demo data.
+ */
 public final class Backend {
     /** System property with the server address, e.g. -Darchivefever.api=http://localhost:8080 */
     public static final String API_PROPERTY="archivefever.api";
     /** Set by the web page to the name of whoever it has signed in, before it starts this UI. */
     public static final String USER_PROPERTY="archivefever.user";
+    /** Set at sign-in to the handle friends find the user by, without the "@". */
+    public static final String HANDLE_PROPERTY="archivefever.handle";
 
     private Backend() {}
 
@@ -35,9 +41,11 @@ public final class Backend {
     private static LibraryController attach(AppShell app,Function<LibraryApi,HostBridge> host) {
         String address=System.getProperty(API_PROPERTY,"").strip();
         if(address.isEmpty())return null;
-        LibraryApi api=new LibraryApi(new ApiClient(address));
+        ApiClient client=new ApiClient(address);
+        LibraryApi api=new LibraryApi(client);
         LibraryController library=new LibraryController(api,host.apply(api));
         app.connect(library);
+        app.connectSocial(new ServerSocial(client,api));
         return library;
     }
 }

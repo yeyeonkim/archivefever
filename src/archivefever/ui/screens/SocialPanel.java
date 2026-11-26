@@ -152,6 +152,17 @@ abstract class SocialPanel extends JPanel {
         return AppFonts.typewriter(size).deriveFont(Map.of(TextAttribute.TRACKING,-.02f));
     }
 
+    /** The typewriter and heading faces have no Korean letters; text with any is set in the body face. */
+    static boolean korean(String text) {
+        return text.codePoints().anyMatch(c->Character.UnicodeScript.of(c)==Character.UnicodeScript.HANGUL);
+    }
+
+    /** The font made smaller, if need be, for the text to fit the width. */
+    static Font fitted(Graphics2D g,String text,Font font,float width) {
+        float natural=text.isEmpty()?0:textWidth(g,text,font);
+        return natural>width?font.deriveFont(font.getSize2D()*width/natural):font;
+    }
+
     /** Draws a line of text whose CSS box (line-height 1) starts at top; returns its width. */
     static float drawText(Graphics2D g,String text,Font font,Color color,float x,float top,boolean underline) {
         TextLayout line=new TextLayout(text,font,g.getFontRenderContext());

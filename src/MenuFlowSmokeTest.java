@@ -8,11 +8,33 @@ import java.io.File;
 import javax.imageio.ImageIO;
 
 public class MenuFlowSmokeTest {
+    /** The demo data's two requests, as the notification paper names their buttons. */
+    private static final String FRIEND_CONFIRM="@yeyeon 친구 요청 확인", SWAP_CONFIRM="@mminzza 교환 요청 확인";
     private static AppShell app;
+    private static AppShell scaledApp;
+    private static ScaledAppView scaled;
     private static final java.util.concurrent.atomic.AtomicInteger cuts=new java.util.concurrent.atomic.AtomicInteger();
     private static final java.util.concurrent.atomic.AtomicInteger bells=new java.util.concurrent.atomic.AtomicInteger();
     private static MenuObjectButton hover;
     private static Rectangle hoverBounds;
+    private interface Step{void run()throws Exception;}
+    private static void onEdt(Step step)throws Exception{
+        java.util.concurrent.atomic.AtomicReference<Throwable> error=new java.util.concurrent.atomic.AtomicReference<>();
+        SwingUtilities.invokeAndWait(()->{try{step.run();}catch(Throwable e){error.set(e);}});
+        if(error.get() instanceof Error e)throw e;
+        if(error.get() instanceof Exception e)throw e;
+    }
+    /** Notifications are read, and answered, in the background: waits for a button to read as given. */
+    private static void awaitButton(Container parent,String name,String text)throws Exception{
+        long end=System.currentTimeMillis()+5000;
+        while(System.currentTimeMillis()<end){
+            boolean[] found={false};
+            onEdt(()->{JButton button=button(parent,name);found[0]=button!=null && text.equals(button.getText());});
+            if(found[0])return;
+            Thread.sleep(25);
+        }
+        throw new AssertionError("Timed out: "+name+" reading "+text);
+    }
     private static <T> T find(Container parent,Class<T> type){
         for(Component child:parent.getComponents()){
             if(type.isInstance(child))return type.cast(child);
@@ -38,7 +60,7 @@ public class MenuFlowSmokeTest {
         ImageIO.write(image,"png",new File(System.getProperty("java.io.tmpdir"),"archivefever-"+name+".png"));
     }
     public static void main(String[] args)throws Exception{
-        SwingUtilities.invokeAndWait(()->{try{
+        onEdt(()->{
             app=new AppShell(()->{},bells::incrementAndGet,cuts::incrementAndGet);app.setSize(412,917);layout(app);
             find(app,KakaoLoginButton.class).doClick(0);app.navigate(Destination.MENU);layout(app);
             require(app.currentDestination()==Destination.MENU,"Menu route");
@@ -51,7 +73,7 @@ public class MenuFlowSmokeTest {
             }
             button(app,"edit").doClick(0);require(cuts.get()==1,"Edit plays scissors sound");
             require(!find(app,NotificationPopup.class).isVisible() && !find(app,ProfilePopup.class).isVisible(),"Edit deliberately unimplemented");
-            button(app,"notification").doClick(0);layout(app);preview("notifications");
+            button(app,"notification").doClick(0);layout(app);
             NotificationPopup notifications=find(app,NotificationPopup.class);
             require(notifications.isVisible(),"Notification opens");
             require(bells.get()==1,"Notification plays bell sound");
@@ -62,44 +84,62 @@ public class MenuFlowSmokeTest {
             BufferedImage plain=new BufferedImage(412,917,2);g=plain.createGraphics();app.paint(g);g.dispose();
             require(image.getRGB(10,0)!=plain.getRGB(10,0),"Mask covers top row");
             button(app,"notification").doClick(0);
+        });
+        awaitButton(app,FRIEND_CONFIRM,"Confirm");
+        onEdt(()->{
+            layout(app);preview("notifications");
             int beforeConfirm=bells.get();
-            button(app,"친구 요청 확인").doClick(0);
+            button(app,FRIEND_CONFIRM).doClick(0);
             require(bells.get()==beforeConfirm+1,"Friend Confirm plays bell");
-            button(app,"친구 요청 확인").doClick(0);
+            button(app,FRIEND_CONFIRM).doClick(0);
             require(bells.get()==beforeConfirm+1,"Disabled Confirm does not replay bell");
-            require(!button(app,"친구 요청 확인").isEnabled() && button(app,"도서 교환 요청 확인").isEnabled(),"Separate confirmations");
+            require(!button(app,FRIEND_CONFIRM).isEnabled() && button(app,SWAP_CONFIRM).isEnabled(),"Separate confirmations");
+        });
+        awaitButton(app,FRIEND_CONFIRM,"Confirmed");
+        onEdt(()->{
+            NotificationPopup notifications=find(app,NotificationPopup.class);
             notifications.getActionMap().get("dismiss").actionPerformed(new ActionEvent(app,0,"dismiss"));
             button(app,"notification").doClick(0);
-            require(!button(app,"친구 요청 확인").isEnabled(),"Confirmation survives reopening");
-            int beforeSwap=bells.get();button(app,"도서 교환 요청 확인").doClick(0);
+            require(!button(app,FRIEND_CONFIRM).isEnabled(),"Confirmation survives reopening");
+            int beforeSwap=bells.get();button(app,SWAP_CONFIRM).doClick(0);
             require(bells.get()==beforeSwap+1,"Swap Confirm plays bell");
-            require(!button(app,"도서 교환 요청 확인").isEnabled(),"Swap confirm");
+            require(!button(app,SWAP_CONFIRM).isEnabled(),"Swap confirm");
+        });
+        awaitButton(app,SWAP_CONFIRM,"Confirmed");
+        onEdt(()->{
+            NotificationPopup notifications=find(app,NotificationPopup.class);
+            require(!button(app,FRIEND_CONFIRM).isEnabled(),"An answer given while the list was being read again stays");
             notifications.dispatchEvent(new MouseEvent(notifications,MouseEvent.MOUSE_CLICKED,System.currentTimeMillis(),0,5,5,1,false));
             require(!notifications.isVisible(),"Outside dismiss");
             button(app,"profile").doClick(0);layout(app);preview("profile");
             require(find(app,ProfilePopup.class).isVisible(),"Profile opens");
             button(app,"로그아웃").doClick(0);
             require(app.currentDestination()==null && !find(app,BookmarkNavigation.class).isVisible(),"Logout resets UI session");
+            require(button(app,FRIEND_CONFIRM)==null,"Logout takes the last person's notifications off the paper");
             app.navigate(Destination.MENU);require(app.currentDestination()==null,"Cannot navigate when logged out");
             find(app,KakaoLoginButton.class).doClick(0);app.navigate(Destination.MENU);layout(app);
             hover=(MenuObjectButton)button(app,"profile");hoverBounds=hover.getBounds();
             hover.dispatchEvent(new MouseEvent(hover,MouseEvent.MOUSE_ENTERED,System.currentTimeMillis(),0,30,30,0,false));
-        }catch(Exception e){throw new RuntimeException(e);}});
+        });
         Thread.sleep(400);
-        SwingUtilities.invokeAndWait(()->{
+        onEdt(()->{
             require(Math.abs(hover.liftAmount()-12)<.2 && hover.getBounds().equals(hoverBounds),"12px hover with stable hit area");
             hover.dispatchEvent(new MouseEvent(hover,MouseEvent.MOUSE_EXITED,System.currentTimeMillis(),0,0,0,0,false));
         });
         Thread.sleep(400);
-        SwingUtilities.invokeAndWait(()->{
+        onEdt(()->{
             require(hover.liftAmount()<.2,"Hover returns to rest");
-            AppShell scaledApp=new AppShell(()->{},bells::incrementAndGet,cuts::incrementAndGet);ScaledAppView scaled=new ScaledAppView(scaledApp,.65);
+            scaledApp=new AppShell(()->{},bells::incrementAndGet,cuts::incrementAndGet);scaled=new ScaledAppView(scaledApp,.65);
             scaled.setSize(scaled.getPreferredSize());layout(scaled);
             scaledClick(scaled,200,450);scaledApp.navigate(Destination.MENU);layout(scaled);
             scaledClick(scaled,230,480);
             require(find(scaledApp,NotificationPopup.class).isVisible(),"Scaled notification click");
+        });
+        awaitButton(scaledApp,FRIEND_CONFIRM,"Confirm");
+        onEdt(()->{
+            layout(scaled);
             scaledClick(scaled,302,368);
-            require(!button(scaledApp,"친구 요청 확인").isEnabled(),"Scaled Confirm click");
+            require(!button(scaledApp,FRIEND_CONFIRM).isEnabled(),"Scaled Confirm click");
             scaledClick(scaled,10,10);
             require(!find(scaledApp,NotificationPopup.class).isVisible(),"Scaled backdrop dismiss");
             scaledClick(scaled,125,598);
@@ -108,5 +148,6 @@ public class MenuFlowSmokeTest {
             require(scaledApp.currentDestination()==null && !find(scaledApp,BookmarkNavigation.class).isVisible(),"Scaled logout click");
             System.out.println("PASS: menu pairs, 12px hover, modal blocking, confirmations, dismissal, profile, logout, login and scaled input");
         });
+        System.exit(0);
     }
 }

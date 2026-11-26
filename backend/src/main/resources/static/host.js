@@ -208,7 +208,7 @@ function say(message) {
   signinMessage.hidden = !message;
 }
 
-// The signed-in user as {id, nickname, provider}, or null when nobody is signed in.
+// The signed-in user as {id, nickname, provider, handle}, or null when nobody is signed in.
 async function currentUser() {
   const response = await fetch('/api/me', { cache: 'no-store' });
   if (response.status === 401) return null;
@@ -304,6 +304,8 @@ async function start() {
         'archivefever.api=' + location.origin,
         // Who is signed in; the Swing UI then opens on the shelf instead of its login screen.
         'archivefever.user=' + user.nickname,
+        // The handle friends find them by, shown in the profile.
+        'archivefever.handle=' + (user.handle || ''),
         // Reading notes go to CheerpJ's persistent (IndexedDB) file system, a folder per
         // user so that two people using one phone do not see each other's marks.
         'archivefever.notes.dir=/files/notes/' + user.id,

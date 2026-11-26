@@ -1,7 +1,8 @@
 package archivefever.ui.screens;
 
-import archivefever.mock.DemoSocial;
 import archivefever.model.BookSwap;
+import archivefever.model.SwapRecord;
+import archivefever.social.Social;
 import archivefever.ui.components.SceneImages;
 import archivefever.ui.theme.*;
 import javax.swing.*;
@@ -12,6 +13,7 @@ import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /** The Figma Book swap cabinet: two books per page, swiped or chosen with the page dots. */
@@ -23,8 +25,8 @@ public final class BookSwapPanel extends SocialPanel {
     private static final BufferedImage WALLPAPER=AppTheme.image("images/social/swap-wallpaper.png");
     private static final BufferedImage STRIPE=AppTheme.image("images/social/swap-stripe.png");
     private static final BufferedImage CABINET=AppTheme.image("images/social/cabinet.png");
-    private final DemoSocial social;
-    private final Consumer<BookSwap> onOpen;
+    private Social social;
+    private final BiConsumer<BookSwap,SwapRecord> onOpen;
     private final JPanel rows=new JPanel(null);
     private final JPanel dots=new JPanel(null);
     private final Timer settle=new Timer(16,e->settleStep());
@@ -35,7 +37,8 @@ public final class BookSwapPanel extends SocialPanel {
     private float slide;
     private boolean dragging, dragged;
 
-    public BookSwapPanel(DemoSocial social,Consumer<BookSwap> onOpen) {
+    /** @param onOpen given a swap and its shared record, once the record has been read */
+    public BookSwapPanel(Social social,BiConsumer<BookSwap,SwapRecord> onOpen) {
         super("Book swap");
         this.social=social;this.onOpen=onOpen;
         setStatusArea(676,true);
@@ -55,6 +58,21 @@ public final class BookSwapPanel extends SocialPanel {
 
     public void showNewest() {page=Integer.MAX_VALUE;}
 
+    public boolean isBusyForTest() {return isBusy();}
+
+    /** Where swaps are kept from now on; what the screen was showing came from the old place. */
+    public void setSocial(Social social) {this.social=social;reset();}
+
+    /**
+     * A swap the friend has accepted opens on its shared record, and so does the record kept
+     * from one that ended; a swap still waiting has nothing to show yet.
+     */
+    private void open(BookSwap swap) {
+        if(dragged || isBusy())return;
+        if(swap.waiting()) {showNotice("waiting for "+swap.friendHandle());return;}
+        request("opening...",()->social.record(swap),record->onOpen.accept(swap,record));
+    }
+
     public void reset() {cancelRequests();stopMotion();pageLayers.clear();swaps=List.of();page=0;showPage(0);}
 
     private int pageCount() {return Math.max(1,(swaps.size()+PAGE_SIZE-1)/PAGE_SIZE);}
@@ -66,8 +84,9 @@ public final class BookSwapPanel extends SocialPanel {
         for(int i=page*PAGE_SIZE;i<Math.min((page+1)*PAGE_SIZE,swaps.size());i++) {
             BookSwap swap=swaps.get(i);
             Rectangle cover=COVERS[i-page*PAGE_SIZE];
-            JButton open=hit(swap.bookTitle()+" 기록 열기",cover.x,cover.y-23,381-cover.x,cover.height,
-                    ()->{if(!dragged)onOpen.accept(swap);});
+            JButton open=hit(swap.bookTitle()+(swap.waiting()?" 수락 대기":swap.ended()?" 지난 기록 열기":" 기록 열기"),
+                    cover.x,cover.y-23,381-cover.x,cover.height,
+                    ()->open(swap));
             listenForSwipe(open);
             rows.add(open);
         }
@@ -197,10 +216,12 @@ public final class BookSwapPanel extends SocialPanel {
         float y=top;
         y=shadowLine(g,swap.bookTitle(),186,y);
         if(!swap.author().isEmpty())y=shadowLine(g,swap.author(),186,y);
-        Font latin=AppFonts.headingRegular(24);
-        float withWidth=textWidth(g,"with ",latin);
-        softShadow(g,"with ",latin,186,y);softShadow(g,swap.friendHandle(),latin,186+withWidth,y);
-        drawText(g,"with ",latin,Color.WHITE,186,y,false);
+        // Until the friend accepts, the swap is only asked for; after the friendship, it is a record of what was.
+        String with=swap.waiting()?"waiting for ":swap.ended()?"once with ":"with ";
+        Font latin=fitted(g,with+swap.friendHandle(),AppFonts.headingRegular(24),195);
+        float withWidth=textWidth(g,with,latin);
+        softShadow(g,with,latin,186,y);softShadow(g,swap.friendHandle(),latin,186+withWidth,y);
+        drawText(g,with,latin,Color.WHITE,186,y,false);
         drawText(g,swap.friendHandle(),latin,Color.WHITE,186+withWidth,y,true);
     }
 

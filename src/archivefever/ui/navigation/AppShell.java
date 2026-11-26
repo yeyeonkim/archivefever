@@ -4,6 +4,8 @@ import archivefever.app.LibraryController;
 import archivefever.mock.DemoBooks;
 import archivefever.mock.DemoSocial;
 import archivefever.model.BookSwap;
+import archivefever.model.SwapRecord;
+import archivefever.social.Social;
 import archivefever.ui.components.ChoicePopup;
 import archivefever.audio.SoundPlayer;
 import archivefever.ui.components.ScanConfirmationPopup;
@@ -29,6 +31,8 @@ public final class AppShell extends JPanel {
     private final SentenceScanPanel sentenceScanPanel;
     private final ScanConfirmationPopup scanPopup;
     private final DemoSocial demoSocial=new DemoSocial(250,DemoBooks.load());
+    /** Friends, swaps and notifications: demo data until {@link #connectSocial} names the server's. */
+    private Social social=demoSocial;
     private final FriendPanel friendPanel;
     private final BookSwapPanel bookSwapPanel;
     private final ChoicePopup choicePopup=new ChoicePopup(this::dismissChoice);
@@ -94,8 +98,8 @@ public final class AppShell extends JPanel {
         selectionPopup=new BookSelectionPopup(this::openReading,this::openSentenceScan,this::dismissBookSelection);
         selectionPopup.setBounds(0,0,412,917);selectionPopup.setVisible(false);
         add(selectionPopup,0);
-        notificationPopup=new NotificationPopup(this::dismissMenuPopups,this.notificationSound,
-                ()->demoSocial.confirmRequest(DemoSocial.REQUESTER_ID),()->demoSocial.declineRequest(DemoSocial.REQUESTER_ID));
+        notificationPopup=new NotificationPopup(this::dismissMenuPopups,this.notificationSound);
+        notificationPopup.setSource(()->social.notices(),(notice,accept)->social.answer(notice,accept));
         profilePopup=new ProfilePopup(this::dismissMenuPopups,this::logout);
         for(JPanel popup:new JPanel[]{notificationPopup,profilePopup}){
             popup.setBounds(0,0,412,917);popup.setVisible(false);add(popup,0);
@@ -167,12 +171,17 @@ public final class AppShell extends JPanel {
         controller.bind(mainPanel,scanPopup,()->{dismissScanConfirmation();navigate(Destination.ARCHIVE);});
         controller.bindSentences(sentenceScanPanel,this::showCollected);
     }
+    /** Runs friends, book swaps and notifications against the server; without this they stay on demo data. */
+    public void connectSocial(Social server){
+        social=server;
+        friendPanel.setSocial(server);bookSwapPanel.setSocial(server);notificationPopup.resetSession();
+    }
 
     private void showNotifications(){
         if(!loggedIn || currentDestination!=Destination.MENU || notificationPopup.isVisible())return;
         notificationSound.run();
         dismissMenuPopups();menuPanel.resetHover();
-        notificationPopup.syncFriendRequest(demoSocial.requestResult(DemoSocial.REQUESTER_ID));
+        notificationPopup.reload();
         notificationPopup.setVisible(true);
         notificationPopup.requestFocusInWindow();repaint();
     }
@@ -186,9 +195,11 @@ public final class AppShell extends JPanel {
     }
     private void dismissChoice(){choicePopup.setVisible(false);repaint();}
     private void showRequestedSwap(){bookSwapPanel.showNewest();navigate(Destination.BOOK_SWAP);}
-    private void openSwapNote(BookSwap swap){
-        showReading(new ReadingPanel(swap.id(),swap.bookTitle(),swap.author(),swap.passage(),
-                swap.comments(),"@sujin",this::returnToArchive));
+    private void openSwapNote(BookSwap swap,SwapRecord record){
+        ReadingPanel panel=new ReadingPanel(record.document(),swap.bookTitle(),swap.author(),
+                record.comments(),record.memoAuthor(),this::returnToArchive);
+        panel.readingText().setPlaceholder(record.emptyNotice());
+        showReading(panel);
     }
     public DemoSocial demoSocial(){return demoSocial;}
     private void logout(){
@@ -378,7 +389,8 @@ public final class AppShell extends JPanel {
      * @param name the name they go by, shown in the profile
      */
     public void signedIn(String name) {
-        profilePopup.setUser(name);
+        String handle=System.getProperty(archivefever.app.Backend.HANDLE_PROPERTY,"");
+        profilePopup.setUser(name,handle.isEmpty()?"":"@"+handle);
         loggedIn=true;
         navigate(Destination.ARCHIVE);
     }

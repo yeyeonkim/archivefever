@@ -86,6 +86,8 @@ public final class DesktopHost implements HostBridge {
                     // Marks made while reading are kept apart for each person on this computer.
                     System.setProperty("archivefever.notes.dir",java.nio.file.Path.of(System.getProperty("user.home"),
                             ".archivefever","notes",user.id()).toString());
+                    // Shown in the profile, for telling friends who to look for.
+                    System.setProperty("archivefever.handle",user.handle()==null?"":user.handle());
                     done.accept(user.nickname());
                 });
             } catch(IOException | RuntimeException e) {

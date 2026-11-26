@@ -26,8 +26,12 @@ public final class LibraryApi {
     /** Text collected from a page of a book. @param page null when the reader left it out */
     public record Passage(Integer page,String text) {}
 
-    /** Someone signed in. @param id also names their folder of reading notes */
-    public record User(String id,String nickname) {}
+    /**
+     * Someone signed in.
+     * @param id also names their folder of reading notes
+     * @param handle the name friends find them by, without the "@"
+     */
+    public record User(String id,String nickname,String handle) {}
 
     private final ApiClient client;
 
@@ -39,7 +43,7 @@ public final class LibraryApi {
      */
     public User signInByName(String name) throws IOException {
         Object user=client.post("/api/auth/dev","{\"name\":"+Json.quote(name)+"}");
-        return new User(Json.string(user,"id"),Json.string(user,"nickname"));
+        return new User(Json.string(user,"id"),Json.string(user,"nickname"),Json.string(user,"handle"));
     }
 
     public void signOut() throws IOException {client.postForNothing("/api/auth/logout");}
@@ -58,9 +62,12 @@ public final class LibraryApi {
         return shelfBook(client.post("/api/scans/"+id+"/confirm"));
     }
 
-    public List<ShelfBook> library() throws IOException {
+    public List<ShelfBook> library() throws IOException {return shelf("/api/library/books");}
+
+    /** The books at a shelf address: the user's own, a friend's, or those the two have in common. */
+    public List<ShelfBook> shelf(String path) throws IOException {
         List<ShelfBook> books=new ArrayList<>();
-        for(Object entry:Json.list(client.get("/api/library/books")))books.add(shelfBook(entry));
+        for(Object entry:Json.list(client.get(path)))books.add(shelfBook(entry));
         return books;
     }
 

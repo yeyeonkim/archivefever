@@ -119,6 +119,11 @@ public class SocialFlowSmokeTest {
         clickSpine("시지프 신화");click("yes");waitText("request failed");
         click("다시 시도");
         waitFor("swap route",()->app.currentDestination()==Destination.BOOK_SWAP);
+        // Asked, not yet accepted: the book is in the cabinet, and there is nothing to open.
+        waitNamed("시지프 신화 수락 대기");
+        click("시지프 신화 수락 대기");waitText("waiting for @haneul");
+        require(edt(()->!app.isReading() && !find(app,BookSwapPanel.class).isBusyForTest()),"A swap that waits for the friend does not open");
+        edt(()->{app.demoSocial().approveSwapForDemo("swap-leehaneul-demo-1");app.navigate(Destination.BOOK_SWAP);return true;});
         waitNamed("시지프 신화 기록 열기");
 
         click("페이지 1");waitNamed("소년이 온다 기록 열기");
@@ -130,7 +135,8 @@ public class SocialFlowSmokeTest {
             return true;
         });
         waitNamed("시지프 신화 기록 열기");
-        require(edt(()->!app.isReading()),"Swiping across a cover does not open it");
+        // Opening reads the record in the background first, so a swipe taken for a press would show as busy.
+        require(edt(()->!app.isReading() && !find(app,BookSwapPanel.class).isBusyForTest()),"Swiping across a cover does not open it");
         Thread.sleep(SLIDE_SETTLE_MILLIS);
         click("페이지 1");waitNamed("소년이 온다 기록 열기");Thread.sleep(SLIDE_SETTLE_MILLIS);
         click("소년이 온다 기록 열기");
@@ -141,8 +147,40 @@ public class SocialFlowSmokeTest {
             return true;
         });
         require(edt(()->!app.isReading() && app.currentDestination()==Destination.BOOK_SWAP),"Return stays on Book swap");
+
+        // A friendship that ends keeps what was read together: the swap stays in the cabinet, as a record to read.
+        edt(()->{app.navigate(Destination.FRIEND);return true;});
+        waitNamed("@sujin05 선택");waitFor("friend list idle",()->!find(app,FriendPanel.class).isBusyForTest());
+        click("@sujin05 선택");click("remove");click("yes");
+        waitFor("friend removed",()->"munsujin removed".equals(find(app,FriendPanel.class).noticeForTest()));
+        edt(()->{app.navigate(Destination.BOOK_SWAP);return true;});
+        waitNamed("소년이 온다 지난 기록 열기");
+        require(edt(()->named(app,"소년이 온다 기록 열기")==null && named(app,"Archive Fever 기록 열기")!=null),
+                "Only the swap with the removed friend has ended");
+        click("소년이 온다 지난 기록 열기");
+        waitFor("kept record",()->app.isReading());
+        require(edt(()->{
+            ReadingText text=((ReadingPanel)frame.getContentPane()).readingText();
+            text.setTool(ReadingText.Tool.PEN);
+            text.dispatchEvent(new MouseEvent(text,MouseEvent.MOUSE_CLICKED,System.currentTimeMillis(),0,40,7,1,false,MouseEvent.BUTTON1));
+            return text.document().memosClosed()!=null && !text.memoEditor().isVisible();
+        }),"A record kept from an ended swap takes no more memos");
+        edt(()->{((JButton)named(frame.getContentPane(),"return to archive")).doClick(0);return true;});
+        require(edt(()->!app.isReading() && app.currentDestination()==Destination.BOOK_SWAP),"Return from a kept record stays on Book swap");
+
+        // What happened above is in the notifications, newest first and three to a page.
+        edt(()->{app.navigate(Destination.MENU);return true;});
+        click("notification");waitText("@haneul accepted your Book swap request.");
+        require(edt(()->hasText(app,"@haneul accepted your friend request.") && hasText(app,"@dohyun accepted your friend request.")),
+                "Accepted friend requests are in the news");
+        require(edt(()->named(app,"@mminzza 교환 요청 확인")==null),"Older notifications wait on the next page");
+        click("다음 알림");waitNamed("@mminzza 교환 요청 확인");
+        require(edt(()->hasText(app,"총, 균, 쇠")),"A swap request names its book");
+        require(edt(()->"Declined".equals(buttonText("@yeyeon 친구 요청 확인")) && named(app,"@yeyeon 친구 요청 거절")==null),
+                "An answer given on the friend screen shows on its notice");
         checkNotificationConfirm();
-        System.out.println("PASS: friend list, search, request, approve, decline, notification, visit, empty, swap shelf, request error retry, swap cabinet, note, return");
+        System.out.println("PASS: friend list, search, request, approve, decline, notification, visit, empty, swap shelf, request error retry, "
+                +"swap waiting and accepted, swap cabinet, note, return, kept record of an ended swap, notification pages, swap request");
         System.exit(0);
     }
 
@@ -161,19 +199,33 @@ public class SocialFlowSmokeTest {
             app.navigate(Destination.MENU);
             return true;
         });
-        click("notification");waitNamed("친구 요청 거절");
         edt(()->{app.demoSocial().failNextRequest();return true;});
-        click("친구 요청 확인");
+        click("notification");waitText("could not load");
+        click("알림 다시 불러오기");waitNamed("@yeyeon 친구 요청 거절");
+        edt(()->{app.demoSocial().failNextRequest();return true;});
+        click("@yeyeon 친구 요청 확인");
         waitText("failed");
-        require(edt(()->((JButton)named(app,"친구 요청 확인")).isEnabled()),"A failed answer can be retried");
-        click("친구 요청 확인");
-        waitFor("confirmed",()->"Confirmed".equals(((JButton)named(app,"친구 요청 확인")).getText()));
-        require(edt(()->named(app,"친구 요청 거절")==null),"Decline disappears after answering");
+        require(edt(()->((JButton)named(app,"@yeyeon 친구 요청 확인")).isEnabled()),"A failed answer can be retried");
+        click("@yeyeon 친구 요청 확인");
+        waitFor("confirmed",()->"Confirmed".equals(buttonText("@yeyeon 친구 요청 확인")));
+        require(edt(()->named(app,"@yeyeon 친구 요청 거절")==null),"Decline disappears after answering");
+        // A friend's swap request is answered apart from the friend request, and accepting it starts the swap.
+        require(edt(()->((JButton)named(app,"@mminzza 교환 요청 확인")).isEnabled()),"Each request is answered on its own");
+        click("@mminzza 교환 요청 확인");
+        waitFor("swap confirmed",()->"Confirmed".equals(buttonText("@mminzza 교환 요청 확인")));
+        edt(()->{app.navigate(Destination.BOOK_SWAP);return true;});
+        waitNamed("소년이 온다 기록 열기");click("페이지 2");waitNamed("총, 균, 쇠 기록 열기");
         edt(()->{app.navigate(Destination.FRIEND);return true;});
         waitNamed("@jinlims2 선택");click("다음 페이지");waitNamed("@yeyeon 선택");
         edt(()->{app.navigate(Destination.MENU);return true;});
         click("notification");
-        waitFor("answer kept",()->"Confirmed".equals(((JButton)named(app,"친구 요청 확인")).getText()));
+        waitFor("answers kept",()->"Confirmed".equals(buttonText("@yeyeon 친구 요청 확인"))
+                && "Confirmed".equals(buttonText("@mminzza 교환 요청 확인")));
+    }
+
+    /** What a button on screen reads, or null while it is not there. */
+    private static String buttonText(String name) {
+        return named(app,name) instanceof JButton button?button.getText():null;
     }
 
     private static void drag(Component target,int id,int x) {

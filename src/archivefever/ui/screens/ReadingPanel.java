@@ -34,8 +34,14 @@ public final class ReadingPanel extends JPanel {
     /** Book swap notes reuse this page; a non-empty memoAuthor selects the shared-note layout. */
     public ReadingPanel(String documentId,String title,String author,String text,
                         List<String> comments,String memoAuthor,Runnable onReturn) {
+        this(new ReadingDocument(documentId,text),title,author,comments,memoAuthor,onReturn);
+    }
+
+    /** A page over a document prepared elsewhere: the shared record of a book swap, memos included. */
+    public ReadingPanel(ReadingDocument document,String title,String author,
+                        List<String> comments,String memoAuthor,Runnable onReturn) {
         setLayout(new BorderLayout());
-        scene=new Scene(documentId,title,author,text,comments,memoAuthor,onReturn,this);
+        scene=new Scene(document,title,author,comments,memoAuthor,onReturn,this);
         add(scene,BorderLayout.CENTER);
     }
 
@@ -128,14 +134,14 @@ public final class ReadingPanel extends JPanel {
         private final List<StationeryButton> stationery;
         private double scale=1,offsetX,offsetY;
 
-        Scene(String documentId,String title,String author,String text,List<String> comments,
+        Scene(ReadingDocument document,String title,String author,List<String> comments,
               String memoAuthor,Runnable onReturn,ReadingPanel owner) {
             this.owner=owner;
             setOpaque(true);
             setBackground(Color.WHITE);
             setLayout(new ReadingLayout(this));
             this.title=title;this.author=author;sharedNote=!memoAuthor.isEmpty();
-            readingText=new ReadingText(new ReadingDocument(documentId,text),comments,memoAuthor);
+            readingText=new ReadingText(document,comments,memoAuthor);
             returnButton=new ReturnButton(onReturn);
             stationery=List.of(
                     new StationeryButton("pencil","images/read/pencil.png"),

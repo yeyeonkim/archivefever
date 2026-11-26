@@ -13,6 +13,22 @@ import java.nio.charset.StandardCharsets;
  * Uses HttpURLConnection because that is what the browser JVM maps onto fetch.
  */
 public final class ApiClient {
+    /** The server answered, and turned the request down. */
+    public static final class Refused extends IOException {
+        private final int status;
+        private final String code;
+
+        Refused(int status,String code) {
+            super("HTTP "+status+(code.isEmpty()?"":" "+code));
+            this.status=status;this.code=code;
+        }
+
+        public int status() {return status;}
+
+        /** The server's word for what was wrong, such as ALREADY_FRIENDS; empty when it gave none. */
+        public String code() {return code;}
+    }
+
     private static final String SESSION_COOKIE="AF_SESSION";
     private final String base;
     /**
@@ -41,13 +57,17 @@ public final class ApiClient {
     }
 
     public Object post(String path,String json) throws IOException {
+        return Json.parse(text(read(send(path,json))));
+    }
+
+    private HttpURLConnection send(String path,String json) throws IOException {
         byte[] body=json.getBytes(StandardCharsets.UTF_8);
         HttpURLConnection connection=open(path,"POST");
         connection.setDoOutput(true);
         connection.setRequestProperty("Content-Type","application/json");
         connection.setFixedLengthStreamingMode(body.length);
         try(OutputStream out=connection.getOutputStream()) {out.write(body);}
-        return Json.parse(text(read(connection)));
+        return connection;
     }
 
     /** POST whose answer has no content, such as signing out. */
@@ -57,6 +77,15 @@ public final class ApiClient {
         connection.setFixedLengthStreamingMode(0);
         connection.getOutputStream().close();
         read(connection);
+    }
+
+    /** POST of JSON whose answer has no content, such as saving a memo. */
+    public void postForNothing(String path,String json) throws IOException {
+        read(send(path,json));
+    }
+
+    public Object delete(String path) throws IOException {
+        return Json.parse(text(read(open(path,"DELETE"))));
     }
 
     public Object postFile(String path,String field,String filename,byte[] content) throws IOException {
@@ -97,8 +126,9 @@ public final class ApiClient {
             rememberSession(connection);
             if(status<200 || status>=300) {
                 InputStream error=connection.getErrorStream();
-                if(error!=null)try(error){error.readAllBytes();}
-                throw new IOException("HTTP "+status);
+                byte[] said=new byte[0];
+                if(error!=null)try(error){said=error.readAllBytes();}
+                throw new Refused(status,errorCode(said));
             }
             try(InputStream in=connection.getInputStream()) {return in.readAllBytes();}
         } finally {connection.disconnect();}
@@ -114,6 +144,14 @@ public final class ApiClient {
             String value=cookie.substring(SESSION_COOKIE.length()+1,end<0?cookie.length():end);
             session=value.isEmpty()?null:value;
         }
+    }
+
+    /** The "error" of a refusal the server explained as {"error":"CODE"}; empty for any other answer. */
+    private static String errorCode(byte[] body) {
+        try {
+            Object error=Json.parse(text(body)) instanceof java.util.Map<?,?> answer?answer.get("error"):null;
+            return error instanceof String code && code.matches("[A-Z_]+")?code:"";
+        } catch(IllegalArgumentException e) {return "";}
     }
 
     private static String text(byte[] bytes) {return new String(bytes,StandardCharsets.UTF_8);}

@@ -118,7 +118,15 @@ public final class ReadingText extends JPanel {
         menu.add(edit);menu.add(delete);
         menu.show(event.getComponent(),event.getX(),event.getY());
     }
+    /** Says why, when the document takes no more memos, and tells the caller to leave it at that. */
+    private boolean memosClosed(){
+        String why=document.memosClosed();
+        if(why==null)return false;
+        status=why;repaint();
+        return true;
+    }
     public void deleteMemo(int sentence){
+        if(memosClosed())return;
         try{
             document.deleteMemo(sentence);drafts.remove(sentence);
             if(editing==sentence){editing=-1;editor.setVisible(false);}
@@ -167,9 +175,14 @@ public final class ReadingText extends JPanel {
         }
         return result;
     }
+    /** Top of the line a row was laid out on; the reverse of how {@link #wrap} places a baseline. */
+    private float lineTop(Row row){
+        return row.baseline-row.layout.getAscent()-(lineHeight()-row.layout.getAscent()-row.layout.getDescent())/2;
+    }
     private void refresh(){revalidate();doLayout();repaint();}
     private void stash(){if(editing>=0)drafts.put(editing,editor.getText());}
     private void edit(int sentence){
+        if(memosClosed())return;
         stash();editing=sentence;
         editor.setText(drafts.getOrDefault(sentence,document.mark(sentence).note()));
         editor.setVisible(true);refresh();editor.requestFocusInWindow();
@@ -179,7 +192,7 @@ public final class ReadingText extends JPanel {
             switch(tool){
                 case PENCIL->document.underline(sentence);
                 case HIGHLIGHTER->document.highlight(sentence);
-                case PEN->{document.enableMemo(sentence);edit(sentence);}
+                case PEN->{if(memosClosed())return;document.enableMemo(sentence);edit(sentence);}
                 case NONE->{return;}
             }
             status="";refresh();
@@ -194,7 +207,8 @@ public final class ReadingText extends JPanel {
     }
     @Override public void doLayout(){
         rows.clear();rows.addAll(wrap(document.text(),font(),327,0));
-        paragraphBottom=rows.size()*lineHeight();
+        // Where the last line ends, not the number of lines: a blank line between passages takes room too.
+        paragraphBottom=rows.isEmpty()?0:lineTop(rows.get(rows.size()-1))+lineHeight();
         memos.clear();commentRows.clear();nameLengths.clear();float y=paragraphBottom+15;
         editor.setFont(font().deriveFont((float)(font().getSize2D()*scale)));
         for(String comment:comments){
@@ -275,7 +289,9 @@ public final class ReadingText extends JPanel {
         }
         if(!status.isEmpty()){
             g.setColor(new Color(0x9A2929));g.setFont(AppFonts.body(11));
-            g.drawString(status,0,scroll+Math.min((float)(getHeight()/scale)-8,paragraphBottom-scroll+130));
+            // Below the memos, when there are that many, and never off the bottom of the page.
+            float below=Math.max(paragraphBottom+130,memos.isEmpty() && commentRows.isEmpty()?0:contentBottom+lineHeight());
+            g.drawString(status,0,Math.min(scroll+(float)(getHeight()/scale)-8,below));
         }
         g.dispose();
     }

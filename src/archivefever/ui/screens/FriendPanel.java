@@ -1,6 +1,6 @@
 package archivefever.ui.screens;
 
-import archivefever.mock.DemoSocial;
+import archivefever.social.Social;
 import archivefever.model.BookSpine;
 import archivefever.model.Friend;
 import archivefever.ui.components.Bookshelf;
@@ -26,7 +26,7 @@ public final class FriendPanel extends SocialPanel {
     private static final BufferedImage CABINET=AppTheme.image("images/social/cabinet.png");
     private static final BufferedImage WALL=AppTheme.image("images/read/wall.png");
     private static final Shape SEARCH_ICON=SceneImages.svgPath("images/social/search.svg");
-    private final DemoSocial social;
+    private Social social;
     private final ChoicePopup choices;
     private final Runnable onRequested;
     private final JPanel rows=new JPanel(null);
@@ -43,7 +43,7 @@ public final class FriendPanel extends SocialPanel {
     private int page, findScroll;
     private final Timer searchTimer=new Timer(SEARCH_DELAY_MILLIS,e->{if(view==View.FIND)runSearch();});
 
-    public FriendPanel(DemoSocial social,ChoicePopup choices,Runnable onRequested) {
+    public FriendPanel(Social social,ChoicePopup choices,Runnable onRequested) {
         super("friend");
         this.social=social;this.choices=choices;this.onRequested=onRequested;
         search.setBounds(71,154,302,28);search.setFont(typewriter(20));search.setForeground(AppColors.GRAY);
@@ -68,6 +68,9 @@ public final class FriendPanel extends SocialPanel {
     }
 
     public void reload() {showView(View.LIST);loadFriends();}
+
+    /** Where friends are kept from now on; what the screen was showing came from the old place. */
+    public void setSocial(Social social) {this.social=social;reset();}
 
     public boolean isBusyForTest() {return isBusy();}
 
@@ -159,10 +162,12 @@ public final class FriendPanel extends SocialPanel {
 
     private void openLibrary(Friend friend,View target) {
         openFriend=friend;library=List.of();shelf.setBooks(List.of());showView(target);
-        request("loading shelf...",()->social.library(friend.id()),books->{
+        // A swap can be asked for only with a book both have; a visit shows the whole shelf.
+        boolean swapping=target==View.SWAP;
+        request("loading shelf...",()->swapping?social.swappable(friend.id()):social.library(friend.id()),books->{
             library=books;
-            if(target==View.SWAP)shelf.setBooks(books);else showPage(0);
-            if(books.isEmpty())setMessage("no books yet");
+            if(swapping)shelf.setBooks(books);else showPage(0);
+            if(books.isEmpty())setMessage(swapping?"no books in common":"no books yet");
         });
     }
 
@@ -337,12 +342,15 @@ public final class FriendPanel extends SocialPanel {
     }
 
     private void paintPeople(Graphics2D g,List<Friend> people,int top,int nameOffset,int handleOffset,int from,int to) {
-        Font nameFont=typewriter(32), handleFont=typewriter(20);
+        Font handleFont=typewriter(20);
         for(int i=from;i<to;i++) {
             Friend friend=people.get(i);
             int slot=(i-from)%PAGE_SIZE, y=top+(i-from)*ROW;
             g.drawImage(slot==0 || slot==3?BUST_A:BUST_B,BUST_X[slot],y+BUST_Y[slot],BUST_SIZE[slot],BUST_SIZE[slot],null);
-            drawText(g,friend.name(),nameFont,AppColors.GRAY,372-textWidth(g,friend.name(),nameFont),y+nameOffset,false);
+            // A name is whatever its owner chose: Korean has its own face, and a long one is made to fit beside the bust.
+            Font nameFont=fitted(g,friend.name(),korean(friend.name())?AppFonts.body(28):typewriter(32),200);
+            drawText(g,friend.name(),nameFont,AppColors.GRAY,372-textWidth(g,friend.name(),nameFont),
+                    y+nameOffset+(32-nameFont.getSize2D())/2,false);
             drawText(g,friend.handle(),handleFont,AppColors.LIGHT_BROWN,367-textWidth(g,friend.handle(),handleFont),y+handleOffset,true);
             if(view==View.FIND && friend.added())paintAddedPill(g,y+83);
         }
@@ -352,11 +360,10 @@ public final class FriendPanel extends SocialPanel {
         drawShadowed(g,CABINET,-12,106,430,799,10,20,8,.25f);
         if(openFriend==null)return;
         String name=openFriend.name();
-        String title=Character.toUpperCase(name.charAt(0))+name.substring(1)+"’s book Archive";
-        Font font=typewriter(36);
+        String title=(name.isEmpty()?name:Character.toUpperCase(name.charAt(0))+name.substring(1))+"’s book Archive";
+        Font font=fitted(g,title,korean(title)?AppFonts.body(30):typewriter(36),380);
         float width=textWidth(g,title,font);
-        if(width>380) {font=typewriter(36*380/width);width=textWidth(g,title,font);}
-        drawText(g,title,font,new Color(0x6F6B47),206-width/2,71,false);
+        drawText(g,title,font,new Color(0x6F6B47),206-width/2,71+(36-font.getSize2D())/2,false);
     }
 
     private void paintSwap(Graphics2D g) {
