@@ -35,6 +35,16 @@ public class MenuFlowSmokeTest {
         }
         throw new AssertionError("Timed out: "+name+" reading "+text);
     }
+    /** The hover runs on a Swing timer, which ticks late on a busy machine: waits for the lift to arrive, not for a fixed time. */
+    private static void awaitLift(double target)throws Exception{
+        long end=System.currentTimeMillis()+3000;
+        while(System.currentTimeMillis()<end){
+            boolean[] there={false};
+            onEdt(()->there[0]=Math.abs(hover.liftAmount()-target)<.2);
+            if(there[0])return;
+            Thread.sleep(25);
+        }
+    }
     private static <T> T find(Container parent,Class<T> type){
         for(Component child:parent.getComponents()){
             if(type.isInstance(child))return type.cast(child);
@@ -121,12 +131,12 @@ public class MenuFlowSmokeTest {
             hover=(MenuObjectButton)button(app,"profile");hoverBounds=hover.getBounds();
             hover.dispatchEvent(new MouseEvent(hover,MouseEvent.MOUSE_ENTERED,System.currentTimeMillis(),0,30,30,0,false));
         });
-        Thread.sleep(400);
+        awaitLift(12);
         onEdt(()->{
             require(Math.abs(hover.liftAmount()-12)<.2 && hover.getBounds().equals(hoverBounds),"12px hover with stable hit area");
             hover.dispatchEvent(new MouseEvent(hover,MouseEvent.MOUSE_EXITED,System.currentTimeMillis(),0,0,0,0,false));
         });
-        Thread.sleep(400);
+        awaitLift(0);
         onEdt(()->{
             require(hover.liftAmount()<.2,"Hover returns to rest");
             scaledApp=new AppShell(()->{},bells::incrementAndGet,cuts::incrementAndGet);scaled=new ScaledAppView(scaledApp,.65);
