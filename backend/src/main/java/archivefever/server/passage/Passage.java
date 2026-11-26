@@ -49,6 +49,14 @@ class Passage {
 		return id;
 	}
 
+	String userId() {
+		return userId;
+	}
+
+	String isbn13() {
+		return isbn13;
+	}
+
 	Integer page() {
 		return page;
 	}
