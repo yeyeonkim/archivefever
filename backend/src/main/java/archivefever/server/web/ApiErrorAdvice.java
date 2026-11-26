@@ -1,5 +1,6 @@
 package archivefever.server.web;
 
+import archivefever.server.book.BookLookup;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,16 @@ class ApiErrorAdvice {
 	@ExceptionHandler(ApiError.class)
 	ResponseEntity<Map<String, String>> refused(ApiError error) {
 		return ResponseEntity.status(error.status()).body(Map.of("error", error.code()));
+	}
+
+	/**
+	 * The catalogue could not be asked: it is down or slow (LOOKUP_UNAVAILABLE), or it turned
+	 * our key down (CONFIG). Either way the fault is not in the request.
+	 */
+	@ExceptionHandler(BookLookup.LookupException.class)
+	ResponseEntity<Map<String, String>> catalogue(BookLookup.LookupException exception) {
+		log.warn("The catalogue could not be asked: {}", exception.getMessage());
+		return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("error", exception.failure().name()));
 	}
 
 	/**

@@ -1,6 +1,7 @@
 package archivefever.server.book;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -8,6 +9,9 @@ import org.springframework.stereotype.Service;
 /** Books by ISBN, answered from the local cache when possible. */
 @Service
 public class BookService {
+
+	/** Nobody types more of a title than this; it only keeps nonsense from being sent on. */
+	private static final int MAX_SEARCH_LENGTH = 100;
 
 	private final BookLookup lookup;
 
@@ -40,6 +44,20 @@ public class BookService {
 			}
 		}
 		return found;
+	}
+
+	/**
+	 * Books the catalogue finds for some words of a title or an author. Nothing of the
+	 * answer is kept: a book is cached once someone picks it and it is looked up by ISBN.
+	 *
+	 * @throws BookLookup.LookupException when the catalogue could not be asked
+	 */
+	public List<Book> search(String words) {
+		String tidy = words == null ? "" : words.strip();
+		if (tidy.isEmpty()) {
+			return List.of();
+		}
+		return lookup.search(tidy.length() > MAX_SEARCH_LENGTH ? tidy.substring(0, MAX_SEARCH_LENGTH) : tidy);
 	}
 
 	/**

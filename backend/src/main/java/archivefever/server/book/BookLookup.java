@@ -1,5 +1,6 @@
 package archivefever.server.book;
 
+import java.util.List;
 import java.util.Optional;
 
 /** Finds a book in an external catalogue. */
@@ -10,6 +11,18 @@ public interface BookLookup {
 	 * @throws LookupException when the catalogue could not be asked
 	 */
 	Optional<Book> findByIsbn13(String isbn13);
+
+	/**
+	 * Paper books the catalogue finds for some words of a title or an author, best match
+	 * first; never more than {@link #SEARCH_RESULTS}. Books without an ISBN-13 (sets of
+	 * several books, mostly) are left out, as a shelf could not hold them.
+	 *
+	 * @return the books, empty when nothing matches
+	 * @throws LookupException when the catalogue could not be asked
+	 */
+	List<Book> search(String words);
+
+	int SEARCH_RESULTS = 20;
 
 	/**
 	 * Short name of where the answers come from. Stored with cached books so that data from

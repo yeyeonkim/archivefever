@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import archivefever.server.image.BookImageService;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,11 @@ class BookSourceChangeTests {
 			calls++;
 			return Optional.ofNullable(title)
 					.map(found -> new Book(isbn13, null, found, "저자", "출판사", "https://www.yes24.com/", null, null, 200));
+		}
+
+		@Override
+		public List<Book> search(String words) {
+			return List.of();
 		}
 
 	}
