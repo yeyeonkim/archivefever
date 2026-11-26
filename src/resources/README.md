@@ -76,11 +76,19 @@ it again. Right-click a memo for Edit/Delete; saving an empty memo deletes it.
 Magnifier cycles body and memo text through 18px / 11px / 14px body sizes;
 book title and author remain fixed, without changing the annotations.
 
-ReadingDocument stores annotations by book ID and sentence range. Files are
+ReadingDocument stores annotations by sentence. Without a server they go to files
 written atomically under ~/.archivefever/notes (override archivefever.notes.dir
-for tests). This is local frontend persistence, not a backend integration.
-Draft memo text stays in memory until Enter. No real book text/author API has
-been connected yet; the current paragraph remains prototype content.
+for tests), one per book ID. With a server the document is given its marks and a
+ReadingDocument.MarkStore: every underline, highlight and memo is then a request to
+the server and counts only once the server has taken it; the file is not used.
+Draft memo text stays in memory until Enter.
+
+Pressing the tool in hand puts it down again. With no tool in hand, a press on a
+sentence is for the passage it belongs to (ReadingText.setSentenceAction): the host
+lets the reader correct its text and page or delete it (HostBridge.editPassage), and
+the page is then read again from the server. In the browser the form for that is the
+page's own HTML, because an HTML text box gets the phone's keyboard; on the desktop
+it is a dialog.
 
 ReadingToolsSmokeTest verifies sentence hit-testing, combined annotations,
 Enter save, persistent reload, book isolation, magnifier cycle, scaled clicks,
@@ -125,15 +133,16 @@ API (see backend/README.md). AppShell.connectSocial switches the screens over.
   the friend accepting, as approveRequestForDemo does for friend requests.
 - Removing a friend ends the swaps being read with them, and keeps their records:
   such a swap stays in the cabinet as "once with @friend" and opens on the record
-  as it stood, to read only. The pen opens no memo box there and the page says
-  why (ReadingDocument.memosClosed, from NoteStore.closed). A swap that was
-  still waiting is simply gone.
+  as it stood, to read only. No tool marks anything there and the page says
+  why (ReadingDocument.closed, from MarkStore.closed). A swap that was still
+  waiting is simply gone.
 - An accepted swap opens on the reading page with both readers' collected passages
   as one text, each under a line with its page and collector ("p.12 · @handle").
-  The friend's memos are listed under the text; the user's own are the document's
-  memos, kept on the server through ReadingDocument.NoteStore: saving or removing
-  a memo is a request, and when it fails the memo counts as not saved. Underlines
-  and highlights stay on the device.
+  The friend's memos are listed under the text; the user's own underlines,
+  highlights and memos are the document's marks, kept on the server through
+  ReadingDocument.MarkStore: making or removing one is a request, and when it fails
+  the mark counts as not made. PassagePage lays the passages out and finds the
+  passage, and the sentence within it, that a sentence of the page is.
 
 MenuFlowSmokeTest covers menu hit areas, exact hover height, modal interception,
 confirmation state, dismissal, logout/login and interactions at 65% scale.
@@ -147,6 +156,18 @@ no camera device, sample book photo, capture code or recognition API is used.
 Scan plays sounds/camera-shutter-click-07.wav asynchronously and opens the
 shared paper confirmation. The 24-bit WAV is decoded to 16-bit PCM; clips are
 released at the end of playback. Sound-device failure does not block the UI.
+
+"or search by title", under the heading, opens BookSearchPanel in the camera
+screen's place: the way to add a book whose barcode is not to hand. Words of a
+title or an author are looked up when Enter or the magnifier is pressed (not while
+typing: each search is a request to YES24), the matches are listed seven to a page,
+and pressing one opens the same confirmation paper with the book's cover; yes puts
+it on the shelf. Books already on the shelf are listed with ADDED and cannot be
+picked. The screen names YES24 with a link, as its terms ask. "scan." has not moved.
+
+A shelf book's "what's next?" paper has "remove from shelf" under read and scan.
+It asks first, saying that the passages collected from the book and the marks on
+them go too; a book being read with a friend stays, and the shelf says why.
 
 The API result panel stays empty. No/Escape/outside click dismisses the review
 for another scan. Yes remains disabled until a backend result is supplied;
@@ -198,10 +219,12 @@ page. Back (Escape) on a captured page returns to the camera for another photo.
 
 Connected to the server, the reading page of a shelf book shows the passages collected
 from it in page order, a paragraph each, with a "p.127" line wherever the page changes
-(LibraryController.readingText). ReadingDocument ends a sentence at every line break, so
-each passage and page note is marked on its own, and when the text grows the saved marks
-follow their sentences to their new places. ReadingText scrolls by drag or wheel once the
-text is longer than the page.
+(LibraryController.page). ReadingDocument ends a sentence at every line break, so each
+passage and page note is marked on its own. Marks are kept on the server by passage and
+by sentence within the passage, so they stay with their passage when others are collected,
+corrected or deleted. Marks made while they were still kept in a file on the device are
+handed over to the server the first time the book is read, and the file is then removed.
+ReadingText scrolls by drag or wheel once the text is longer than the page.
 
 On the desktop there is no camera: without a server both screens behave as described
 above, and with one (-Darchivefever.api) save opens a dialog to type the passage in.

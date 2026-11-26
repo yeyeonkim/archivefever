@@ -3,9 +3,9 @@
 Spring Boot 서버입니다. 세 가지 일을 합니다.
 
 - 로그인: 카카오 로그인, 키가 없으면 이름만 적는 개발용 로그인. 서재와 문장은 사용자별로 따로 있습니다.
-- REST API: 도서 스캔(바코드 사진 → ISBN → YES24 조회), 내 서재, 책 이미지
+- REST API: 도서 스캔(바코드 사진 → ISBN → YES24 조회), 제목으로 도서 검색, 내 서재, 수집한 문장과 그 위의 밑줄·형광펜·메모, 책 이미지
 - Swing 화면을 브라우저에서 실행하는 페이지 서빙 (CheerpJ 사용)
-- 서재·스캔 기록·수집한 문장을 DB에 저장 (MySQL 권장, 설정이 없으면 H2 파일 DB)
+- 서재·스캔 기록·수집한 문장·밑줄·형광펜·메모를 DB에 저장 (MySQL 권장, 설정이 없으면 H2 파일 DB)
 
 ## 실행
 
@@ -33,6 +33,8 @@ cd backend
 키를 넣거나 바꾼 뒤에는 서버를 다시 시작해야 합니다. 시작 로그에 `Book lookups use the YES24 Open API` 가 나오면 적용된 것입니다.
 
 키 없이 스캔해 "스텁 도서"로 저장된 책은, 키를 넣은 뒤 같은 책을 다시 스캔하면 실제 정보로 바뀝니다.
+
+제목 검색은 YES24의 상품 검색(`/goods/itemList`)을 쓰고, 결과에서 ISBN-13이 없는 것(세트 상품 등)과 eBook은 뺍니다. 검색 결과는 저장하지 않고, 고른 책만 ISBN으로 다시 조회해 저장합니다. 키가 없으면 무엇을 검색하든 같은 스텁 도서 세 권이 나옵니다("없는 책"이 들어간 검색어는 결과 없음).
 
 YES24 약관상 도서 정보를 보여 주는 화면에는 출처(YES24)와 상품 페이지 링크가 있어야 합니다.
 
@@ -83,8 +85,9 @@ IntelliJ에서 `Main`을 실행할 때 VM 옵션에 서버 주소를 주면, 책
 -Darchivefever.api=http://localhost:8080
 ```
 
-데스크톱에서는 scan을 누르면 카메라 대신 파일 선택창이 뜹니다. 뒤표지 바코드 사진을 고르면 됩니다.
+데스크톱에서는 scan을 누르면 카메라 대신 파일 선택창이 뜹니다. 뒤표지 바코드 사진을 고르면 됩니다. 바코드 없이 추가하려면 Add book 화면의 **or search by title**로 제목을 검색합니다.
 문장 수집(책장의 책 → scan → save)도 데스크톱에는 카메라와 글자 인식이 없어서, save를 누르면 문장과 쪽수를 직접 입력하는 창이 뜹니다.
+독서 화면에서 필기구를 들지 않은 채(든 필기구를 한 번 더 누르면 내려놓습니다) 문장을 누르면 그 문장을 고치거나 지우는 창이 뜹니다. 폰과 브라우저에서는 페이지가 띄우는 입력 창이고, 데스크톱에서는 대화 상자입니다.
 카카오 로그인 버튼을 누르면 이름을 묻는 창이 뜹니다. 데스크톱은 개발용 로그인만 되므로, 서버가 카카오 로그인만 받도록 되어 있으면 로그인할 수 없습니다.
 
 ## API
@@ -97,8 +100,15 @@ IntelliJ에서 `Main`을 실행할 때 VM 옵션에 서버 주소를 주면, 책
 | `POST /api/scans/{id}/cancel` | 사진을 기다리는 스캔 취소 |
 | `POST /api/scans/{id}/confirm` | 조회된 책을 내 서재에 추가 |
 | `GET /api/library/books` | 내 서재 |
-| `GET /api/library/books/{isbn13}/passages` | 그 책에서 수집한 문장. 쪽수 순(쪽수 없는 것은 마지막), 같은 쪽은 수집한 순 |
+| `GET /api/books?query=…` | 제목·저자로 도서 검색. `[{isbn13, title, author, publisher, link, onShelf}]`, 최대 20권. `onShelf`는 이미 내 서재에 있는지 |
+| `GET /api/books/{isbn13}` | 책 한 권을 조회(없으면 YES24에 물어봄). 추가하기 전에 표지와 함께 보여 줄 때 씀 |
+| `POST /api/library/books` | 검색으로 고른 책을 내 서재에 추가. JSON `{"isbn13": "…"}` |
+| `DELETE /api/library/books/{isbn13}` | 책을 서재에서 뺌. 그 책에서 수집한 문장과 표시도 함께 지움. 친구와 교환독서 중인 책은 409 `SWAPPING` |
+| `GET /api/library/books/{isbn13}/passages` | 그 책에서 수집한 문장. 쪽수 순(쪽수 없는 것은 마지막), 같은 쪽은 수집한 순. 문장마다 내 표시 `marks: [{sentence, underlined, highlighted, note}]` |
 | `POST /api/library/books/{isbn13}/passages` | 문장 수집. JSON `{"page": 127, "text": "…"}`, `page`는 생략 가능(1~9999), `text`는 2000자 이내. 서재에 없는 책은 404 |
+| `PUT /api/library/books/{isbn13}/passages/{id}` | 문장 수정(글과 쪽수). 같은 JSON, `page`를 빼면 쪽수가 없어짐. 표시는 그대로 남음 |
+| `DELETE /api/library/books/{isbn13}/passages/{id}` | 문장 삭제. 그 문장의 표시(교환 상대가 쓴 메모 포함)도 함께 지움 |
+| `POST /api/library/books/{isbn13}/passages/{id}/marks` | 문장 안의 한 문장에 밑줄·형광펜·메모를 지금부터 이렇게 둔다는 요청. JSON `{"sentence": 0, "underlined": true, "highlighted": false, "note": "…"}`. 모두 끄고 메모가 비면 표시가 없어짐 |
 | `GET /api/images/{isbn13}/cover.png`, `spine.png` | 표지, 책등 이미지 |
 | `GET /api/health` | 서버 확인 |
 | `GET /api/me` | 로그인한 사용자 `{id, nickname, provider, handle}`. 로그인하지 않았으면 401 |
@@ -117,12 +127,16 @@ IntelliJ에서 `Main`을 실행할 때 VM 옵션에 서버 주소를 주면, 책
 | `POST /api/swaps` | 교환독서 신청. JSON `{"friend": "아이디", "isbn13": "…"}` |
 | `POST /api/swaps/{id}/accept`, `/decline` | 받은 신청 수락·거절 |
 | `GET /api/swaps/{id}/records` | 두 사람이 그 책에서 수집한 문장과 메모 `{me, partner, book, passages, notes}`. 끝난 교환독서는 끝난 때까지의 것 |
-| `POST /api/swaps/{id}/notes` | 문장에 내 메모 쓰기. JSON `{"passageId": 3, "sentence": 0, "text": "…"}`, `text`가 비면 삭제, 1000자 이내 |
+| `POST /api/swaps/{id}/notes` | 교환독서 기록의 문장에 내 표시 두기. JSON `{"passageId": 3, "sentence": 0, "underlined": false, "highlighted": false, "text": "…"}`. `text`는 메모(1000자 이내), 모두 끄고 비면 삭제 |
 | `GET /api/notifications` | 알림. 최신순 30개 |
 
 스캔 상태: `PENDING` → `RESOLVED`(책 찾음) / `NO_BARCODE` / `NOT_FOUND` / `FAILED` / `CANCELLED` / `EXPIRED`(5분), `RESOLVED` → `CONFIRMED`.
 
 수집한 문장은 글자만 저장합니다. 페이지 사진은 폰에서 글자를 읽는 데만 쓰이고 서버로 오지 않습니다.
+
+밑줄·형광펜·메모는 수집한 문장(`passage`) 안의 몇 번째 문장(`sentence`, 0부터)에 붙습니다. 화면이 문장을 나누는 방식(마침표 뒤, 줄바꿈)과 같은 번호입니다. 문장을 고쳐서 문장 수가 줄면 남는 번호의 표시는 화면에 나오지 않습니다.
+
+서재·문장·검색 요청이 거절될 때의 코드: `INVALID_ISBN`(400), `BOOK_NOT_FOUND`(404, YES24에 없는 ISBN), `NOT_ON_SHELF`(404), `PASSAGE_NOT_FOUND`(404, 남의 문장도 이렇게 답함), `SWAPPING`(409), 그리고 YES24에 물어볼 수 없을 때 502와 함께 `LOOKUP_UNAVAILABLE`(YES24 장애·한도) 또는 `CONFIG`(키가 거절됨).
 
 `/api` 아래는 로그인해야 쓸 수 있고(세션 쿠키 `AF_SESSION`), 로그인하지 않은 요청에는 401로 답합니다. 예외는 서버 확인, 책 이미지, 로그인 자체, 그리고 폰 앱이 세션 없이 보내는 바코드 사진 업로드와 스캔 취소입니다. 뒤의 둘은 로그인한 화면이 만든 스캔의 무작위 id를 아는 것으로 허용합니다. 스캔 조회·확정, 서재, 문장은 자기 것만 보입니다. 다른 사람의 것이 보이는 경우는 둘뿐입니다: 친구의 서재, 그리고 수락된 교환독서의 기록.
 
@@ -169,7 +183,8 @@ spring.datasource.password=원하는비밀번호
 ### DB에 들어가지 않는 것
 
 - 표지·책등 이미지(`data/images`)와 올린 바코드 사진(`data/uploads`)은 어느 DB를 쓰든 `backend/data/` 폴더에 있습니다. 이 폴더는 git에 올라가지 않습니다.
-- 내 독서 화면의 밑줄·형광펜·메모와 교환독서 화면의 밑줄·형광펜은 아직 서버로 가지 않습니다. 폰에서는 앱(WebView) 저장소에, 데스크톱에서는 `~/.archivefever/notes`에 남으므로 앱 데이터를 지우면 사라집니다. 교환독서 화면에서 쓴 메모만 서버에 저장되어 상대에게 보입니다.
+- 밑줄·형광펜·메모는 이제 DB에 저장됩니다(내 독서 화면과 교환독서 화면 모두). 그 전에 기기에 남겨 둔 것(폰은 앱 저장소, 데스크톱은 `~/.archivefever/notes`)은 그 책의 독서 화면을 처음 열 때 서버로 옮기고 기기의 파일은 지웁니다. 서버에 그 책의 표시가 이미 있으면 옮기지 않습니다. 쪽수 줄("p.12")에 해 둔 표시는 붙을 문장이 없어 옮겨지지 않습니다.
+- 교환 상대에게는 내 메모만 보이고, 밑줄·형광펜은 보이지 않습니다.
 - DB는 서버를 실행하는 PC마다 따로입니다. 다른 PC에서 서버를 켜면 빈 서재로 시작합니다.
 
 자동 테스트(`gradlew test`)는 어떤 설정이 있든 메모리 안의 H2만 씁니다.
