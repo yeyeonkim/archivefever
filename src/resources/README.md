@@ -100,10 +100,40 @@ pixels on hover, with alpha-aware hit testing. Edit has no action yet.
 
 PaperPopup shares the paper texture, full-screen scrim and outside-click/Escape
 dismissal between the existing book chooser and both new overlays.
-Notifications are demo data: Confirm acknowledges each row locally for the
-current UI session, with no social/backend request sent. Profile is empty as
-in the supplied frame. Logout closes overlays, clears the UI login state and
-returns to the login screen; it does not delete locally saved reading notes.
+The notification paper lists friend and book swap requests to answer (Confirm or
+Decline, then the answer as plain text) and news of how the user's own requests
+were answered, newest first, three to a page with prev/next. It reads the list
+when it opens and answers through background calls (NotificationPopup.setSource);
+a failed answer shows "failed" on its row and can be tried again. The profile shows
+the signed-in name and, under it, the handle friends find the user by. Logout
+closes overlays, clears the UI login state and returns to the login screen; it
+does not delete locally saved reading notes.
+
+## Friends, book swaps and notifications
+
+The friend and Book swap screens and the notification paper get their data through
+archivefever.social.Social. Without a server that is DemoSocial (in-memory demo
+people and swaps); with one, Backend connects ServerSocial, which calls the REST
+API (see backend/README.md). AppShell.connectSocial switches the screens over.
+
+- People are shown as name and "@handle". A name may be Korean (a Kakao nickname):
+  the typewriter and heading faces have no Korean letters, so such text is drawn
+  in the body face (SocialPanel.korean), and long names are shrunk to fit.
+- "swap" on a friend shows only the books both have; a swap that was asked for
+  sits in the Book swap cabinet as "waiting for @friend" until the friend accepts,
+  and only then opens. In demo data DemoSocial.approveSwapForDemo stands in for
+  the friend accepting, as approveRequestForDemo does for friend requests.
+- Removing a friend ends the swaps being read with them, and keeps their records:
+  such a swap stays in the cabinet as "once with @friend" and opens on the record
+  as it stood, to read only. The pen opens no memo box there and the page says
+  why (ReadingDocument.memosClosed, from NoteStore.closed). A swap that was
+  still waiting is simply gone.
+- An accepted swap opens on the reading page with both readers' collected passages
+  as one text, each under a line with its page and collector ("p.12 · @handle").
+  The friend's memos are listed under the text; the user's own are the document's
+  memos, kept on the server through ReadingDocument.NoteStore: saving or removing
+  a memo is a request, and when it fails the memo counts as not saved. Underlines
+  and highlights stay on the device.
 
 MenuFlowSmokeTest covers menu hit areas, exact hover height, modal interception,
 confirmation state, dismissal, logout/login and interactions at 65% scale.

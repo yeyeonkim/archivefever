@@ -77,7 +77,7 @@ YES24 약관상 도서 정보를 보여 주는 화면에는 출처(YES24)와 상
 
 ## 데스크톱 Swing을 서버에 붙이기
 
-IntelliJ에서 `Main`을 실행할 때 VM 옵션에 서버 주소를 주면, 책장과 도서 등록이 서버를 씁니다. 옵션이 없으면 기존 데모 데이터로 동작합니다.
+IntelliJ에서 `Main`을 실행할 때 VM 옵션에 서버 주소를 주면, 책장과 도서 등록, 문장 수집, 친구·교환독서·알림이 서버를 씁니다. 옵션이 없으면 기존 데모 데이터로 동작합니다.
 
 ```
 -Darchivefever.api=http://localhost:8080
@@ -101,17 +101,40 @@ IntelliJ에서 `Main`을 실행할 때 VM 옵션에 서버 주소를 주면, 책
 | `POST /api/library/books/{isbn13}/passages` | 문장 수집. JSON `{"page": 127, "text": "…"}`, `page`는 생략 가능(1~9999), `text`는 2000자 이내. 서재에 없는 책은 404 |
 | `GET /api/images/{isbn13}/cover.png`, `spine.png` | 표지, 책등 이미지 |
 | `GET /api/health` | 서버 확인 |
-| `GET /api/me` | 로그인한 사용자 `{id, nickname, provider}`. 로그인하지 않았으면 401 |
+| `GET /api/me` | 로그인한 사용자 `{id, nickname, provider, handle}`. 로그인하지 않았으면 401 |
 | `GET /api/auth/options` | 로그인 화면이 보여 줄 방법 `{kakao, development}` |
 | `POST /api/auth/dev` | 개발용 로그인. JSON `{"name": "…"}`. 꺼져 있으면 404 |
 | `POST /api/auth/logout` | 로그아웃 |
 | `GET /auth/kakao/login`, `/auth/kakao/callback` | 카카오로 보내고, 돌아온 브라우저를 로그인시킴 |
+| `GET /api/users?query=…` | 사용자 검색(닉네임이나 아이디에 포함, `@`로 시작하면 아이디만). `[{handle, name, status}]`, 최대 20명 |
+| `GET /api/friends` | 내 친구 목록 |
+| `POST /api/friends/{handle}/request` | 친구 신청 |
+| `POST /api/friends/{handle}/accept`, `/decline` | 받은 신청 수락·거절 |
+| `DELETE /api/friends/{handle}` | 친구 삭제. 둘 사이의 교환독서도 끝나고, 그때까지의 기록은 남음 |
+| `GET /api/friends/{handle}/books` | 친구의 서재. 친구가 아니면 403 |
+| `GET /api/swaps` | 진행 중인 교환독서, 내가 신청해 답을 기다리는 것, 친구가 끝나 기록만 남은 것 |
+| `GET /api/swaps/candidates?friend={handle}` | 그 친구와 교환독서를 신청할 수 있는 책(둘 다 가진 책) |
+| `POST /api/swaps` | 교환독서 신청. JSON `{"friend": "아이디", "isbn13": "…"}` |
+| `POST /api/swaps/{id}/accept`, `/decline` | 받은 신청 수락·거절 |
+| `GET /api/swaps/{id}/records` | 두 사람이 그 책에서 수집한 문장과 메모 `{me, partner, book, passages, notes}`. 끝난 교환독서는 끝난 때까지의 것 |
+| `POST /api/swaps/{id}/notes` | 문장에 내 메모 쓰기. JSON `{"passageId": 3, "sentence": 0, "text": "…"}`, `text`가 비면 삭제, 1000자 이내 |
+| `GET /api/notifications` | 알림. 최신순 30개 |
 
 스캔 상태: `PENDING` → `RESOLVED`(책 찾음) / `NO_BARCODE` / `NOT_FOUND` / `FAILED` / `CANCELLED` / `EXPIRED`(5분), `RESOLVED` → `CONFIRMED`.
 
 수집한 문장은 글자만 저장합니다. 페이지 사진은 폰에서 글자를 읽는 데만 쓰이고 서버로 오지 않습니다.
 
-`/api` 아래는 로그인해야 쓸 수 있고(세션 쿠키 `AF_SESSION`), 로그인하지 않은 요청에는 401로 답합니다. 예외는 서버 확인, 책 이미지, 로그인 자체, 그리고 폰 앱이 세션 없이 보내는 바코드 사진 업로드와 스캔 취소입니다. 뒤의 둘은 로그인한 화면이 만든 스캔의 무작위 id를 아는 것으로 허용합니다. 스캔 조회·확정, 서재, 문장은 자기 것만 보입니다.
+`/api` 아래는 로그인해야 쓸 수 있고(세션 쿠키 `AF_SESSION`), 로그인하지 않은 요청에는 401로 답합니다. 예외는 서버 확인, 책 이미지, 로그인 자체, 그리고 폰 앱이 세션 없이 보내는 바코드 사진 업로드와 스캔 취소입니다. 뒤의 둘은 로그인한 화면이 만든 스캔의 무작위 id를 아는 것으로 허용합니다. 스캔 조회·확정, 서재, 문장은 자기 것만 보입니다. 다른 사람의 것이 보이는 경우는 둘뿐입니다: 친구의 서재, 그리고 수락된 교환독서의 기록.
+
+### 친구·교환독서·알림
+
+- **아이디**: 다른 사용자는 아이디(handle)로 찾고 부릅니다. 화면에는 `@`를 붙여 보입니다. 개발용 로그인은 그 이름이 아이디이고, 카카오 사용자는 처음 로그인할 때 서버가 `reader4821` 같은 아이디를 정해 줍니다(직접 고르는 것은 회원가입 화면이 생긴 뒤). 내 아이디는 프로필에 보입니다. 사용자 id(카카오 회원번호가 들어 있음)는 본인에게만 주고 다른 사용자에게는 닉네임과 아이디만 줍니다.
+- **친구**: 신청하고, 상대가 수락해야 친구입니다. 검색 결과의 `status`는 내 입장에서 본 관계입니다: `NONE`, `REQUESTED`(내가 신청함), `INCOMING`(상대가 신청함), `ADDED`. 거절하거나 삭제하면 관계가 남지 않아 다시 신청할 수 있습니다.
+- **교환독서**: 실물 책을 주고받는 것이 아니라, 같은 책을 가진 친구끼리 그 책의 기록을 함께 보는 것입니다. 친구여야 하고 둘 다 그 책이 서재에 있어야 신청할 수 있으며, 같은 두 사람·같은 책으로는 누가 신청하든 대기 중이거나 진행 중인 것이 하나뿐입니다. 상태는 `PENDING` → `ACTIVE`(수락) / `DECLINED`. 받은 사람만 답할 수 있고, 수락할 때 둘 다 책을 가지고 있는지 다시 확인합니다.
+- **기록 공유**: 수락 전과 거절 뒤에는 아무것도 공유하지 않습니다. `ACTIVE`인 동안 두 사람에게 두 사람이 수집한 문장과 그 문장에 쓴 메모를 줍니다. 메모는 자기 것만 쓰고 고치고 지울 수 있습니다. 메모는 문장에 붙으므로(`passageId`와 그 문장 안에서 몇 번째 문장인지 `sentence`) 나중에 수집한 문장과 고친 메모는 기록을 다시 읽을 때 반영됩니다.
+- **친구가 끝났을 때**: 친구를 삭제하면 진행 중이던 교환독서는 `ENDED`가 되고, 그때까지의 기록은 두 사람에게 남습니다. 남은 기록은 읽기만 됩니다(메모를 쓰면 409 `NOT_ACTIVE`). 끝난 뒤에 수집한 문장과, 끝난 뒤에 쓴 사람이 고친 메모는 들어가지 않습니다. 기록을 따로 복사해 두는 것이 아니라 끝난 시각으로 걸러서 주기 때문에, 고친 메모는 예전 글로 남지 않고 그 기록에서 빠집니다. 답을 기다리던 신청은 `WITHDRAWN`이 되고 아무것도 남기지 않습니다. 다시 친구가 되어 같은 책으로 교환독서를 시작하면 새 교환독서가 전부를 보여 주므로, 목록에는 예전 기록 대신 새것이 나옵니다.
+- **알림**: 신청이 오면 받은 사람에게(`FRIEND_REQUEST`, `SWAP_REQUEST`), 답하면 신청한 사람에게(`FRIEND_ACCEPTED`·`FRIEND_DECLINED`·`SWAP_ACCEPTED`·`SWAP_DECLINED`) 생깁니다. 신청 알림의 `state`는 `PENDING`이다가 답한 뒤 `ACCEPTED`나 `DECLINED`가 됩니다. 알림에서 답할 때는 위의 친구·교환독서 주소를 씁니다.
+- **거절 응답**: 요청을 받아들일 수 없으면 `{"error": "코드"}`와 함께 4xx로 답합니다. `USER_NOT_FOUND`, `SELF`, `ALREADY_FRIENDS`, `ALREADY_REQUESTED`, `REQUEST_WAITING`(상대가 이미 신청함), `NO_REQUEST`, `NOT_FRIENDS`, `NOT_COMMON`(둘 다 가진 책이 아님), `ALREADY_SWAPPING`, `NOT_YOURS_TO_ANSWER`, `ALREADY_ANSWERED`, `BOOK_MISSING`(수락하려는데 한쪽이 책을 뺌), `NOT_ACTIVE`, `SWAP_NOT_FOUND`(남의 교환독서도 이렇게 답함), `PASSAGE_NOT_FOUND`.
 
 ## 데이터베이스
 
@@ -146,7 +169,7 @@ spring.datasource.password=원하는비밀번호
 ### DB에 들어가지 않는 것
 
 - 표지·책등 이미지(`data/images`)와 올린 바코드 사진(`data/uploads`)은 어느 DB를 쓰든 `backend/data/` 폴더에 있습니다. 이 폴더는 git에 올라가지 않습니다.
-- 밑줄·형광펜·메모는 아직 서버로 가지 않습니다. 폰에서는 앱(WebView) 저장소에, 데스크톱에서는 `~/.archivefever/notes`에 남으므로 앱 데이터를 지우면 사라집니다.
+- 내 독서 화면의 밑줄·형광펜·메모와 교환독서 화면의 밑줄·형광펜은 아직 서버로 가지 않습니다. 폰에서는 앱(WebView) 저장소에, 데스크톱에서는 `~/.archivefever/notes`에 남으므로 앱 데이터를 지우면 사라집니다. 교환독서 화면에서 쓴 메모만 서버에 저장되어 상대에게 보입니다.
 - DB는 서버를 실행하는 PC마다 따로입니다. 다른 PC에서 서버를 켜면 빈 서재로 시작합니다.
 
 자동 테스트(`gradlew test`)는 어떤 설정이 있든 메모리 안의 H2만 씁니다.
