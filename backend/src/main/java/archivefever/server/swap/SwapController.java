@@ -21,8 +21,13 @@ class SwapController {
 	record NewSwap(String friend, String isbn13) {
 	}
 
-	/** @param text blank to take the memo away */
-	record NewNote(long passageId, int sentence, String text) {
+	/**
+	 * How the user marks one sentence of a passage from now on.
+	 *
+	 * @param underlined left out means not underlined; likewise highlighted
+	 * @param text the memo; blank or left out for none
+	 */
+	record NewNote(long passageId, int sentence, Boolean underlined, Boolean highlighted, String text) {
 	}
 
 	private final SwapService swaps;
@@ -66,11 +71,12 @@ class SwapController {
 		return swaps.records(user.id(), id);
 	}
 
-	/** Writes, rewrites or (with blank text) removes the user's memo on a sentence. */
+	/** Sets the user's underline, highlight and memo on a sentence; all off and blank removes them. */
 	@PostMapping("/{id}/notes")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	void writeNote(@PathVariable long id, @RequestBody NewNote note) {
-		swaps.writeNote(user.id(), id, note.passageId(), note.sentence(), note.text());
+	void mark(@PathVariable long id, @RequestBody NewNote note) {
+		swaps.mark(user.id(), id, note.passageId(), note.sentence(), Boolean.TRUE.equals(note.underlined()),
+				Boolean.TRUE.equals(note.highlighted()), note.text());
 	}
 
 }

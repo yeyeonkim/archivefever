@@ -109,6 +109,16 @@ class SwapFlowTests {
 				.containsExactlyInAnyOrder(org.assertj.core.groups.Tuple.tuple("다시 읽어도 좋네.", true),
 						org.assertj.core.groups.Tuple.tuple("나도.", false));
 
+		// An underline or a highlight is the reader's own: they get it back, the friend is not shown it.
+		assertThat(ann.post().uri("/api/swaps/{id}/notes", swap).contentType(MediaType.APPLICATION_JSON)
+				.body(Map.of("passageId", bobPassage, "sentence", 0, "underlined", true, "highlighted", true, "text", ""))
+				.retrieve().toBodilessEntity().getStatusCode().value()).isEqualTo(204);
+		assertThat(list(records(ann, swap).getBody(), "notes")).filteredOn(note -> note.get("sentence").equals(0))
+				.singleElement().satisfies(note -> assertThat(note).containsEntry("underlined", true)
+						.containsEntry("highlighted", true).containsEntry("text", "").containsEntry("mine", true));
+		assertThat(list(records(bob, swap).getBody(), "notes")).extracting(note -> note.get("text"))
+				.containsExactlyInAnyOrder("다시 읽어도 좋네.", "나도.");
+
 		// A passage collected later is there the next time the records are read.
 		collect(ann, BOOK, 3, "나중에 모은 문장.");
 		assertThat(list(records(bob, swap).getBody(), "passages")).extracting(passage -> passage.get("text"))

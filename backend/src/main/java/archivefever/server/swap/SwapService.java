@@ -5,6 +5,7 @@ import archivefever.server.book.BookService;
 import archivefever.server.friend.FriendService;
 import archivefever.server.friend.FriendshipEnded;
 import archivefever.server.library.LibraryService;
+import archivefever.server.library.ShelfBookLeaving;
 import archivefever.server.notification.NotificationService;
 import archivefever.server.passage.PassageService;
 import archivefever.server.passage.PassageService.OwnedPassage;
@@ -52,10 +53,15 @@ public class SwapService {
 	}
 
 	/**
-	 * @param sentence which sentence of the passage the memo is on, counting from 0
-	 * @param by the handle of whoever wrote it
+	 * A reader's marks on one sentence. The user's own come with their underline and
+	 * highlight; the friend's are here for their memo, and only when there is one.
+	 *
+	 * @param sentence which sentence of the passage it is on, counting from 0
+	 * @param text the memo; empty when the sentence is only underlined or highlighted
+	 * @param by the handle of whoever made it
 	 */
-	public record RecordNote(long passageId, int sentence, String text, String by, boolean mine) {
+	public record RecordNote(long passageId, int sentence, String text, boolean underlined, boolean highlighted,
+			String by, boolean mine) {
 	}
 
 	/** What the two readers of a swap collected from the book, in reading order, and their memos. */
@@ -182,25 +188,43 @@ public class SwapService {
 				.map(passage -> new RecordPassage(passage.id(), passage.page(), passage.text(),
 						handles.get(passage.userId()), passage.userId().equals(me)))
 				.toList();
-		List<RecordNote> notes = passages.notes(collected.stream().map(OwnedPassage::id).toList(), handles.keySet(), until).stream()
-				.map(note -> new RecordNote(note.passageId(), note.sentence(), note.text(), handles.get(note.authorId()),
-						note.authorId().equals(me)))
+		List<RecordNote> notes = passages.marks(collected.stream().map(OwnedPassage::id).toList(), handles.keySet(), until).stream()
+				// What a friend underlined for themselves is not shown; what they wrote is.
+				.filter(mark -> mark.authorId().equals(me) || !mark.note().isEmpty())
+				.map(mark -> new RecordNote(mark.passageId(), mark.sentence(), mark.note(), mark.underlined(),
+						mark.highlighted(), handles.get(mark.authorId()), mark.authorId().equals(me)))
 				.toList();
 		return new Records(swap.id(), person(self), person(partner), book(swap.isbn13()), shown, notes);
 	}
 
 	/**
-	 * Writes the user's memo on a sentence of a passage of this swap: one of theirs or one
-	 * of their partner's. Blank text takes the memo away. Only ever the user's own memo, and
-	 * only while the swap is being read: a record kept from an ended swap is not written on.
+	 * Sets how the user marks a sentence of a passage of this swap, one of theirs or one of
+	 * their partner's: underlined or not, highlighted or not, and their memo (blank for
+	 * none). Only ever the user's own marks, and only while the swap is being read: a record
+	 * kept from an ended swap is not written on.
 	 */
 	@Transactional
-	public void writeNote(String me, long id, long passageId, int sentence, String text) {
+	public void mark(String me, long id, long passageId, int sentence, boolean underlined, boolean highlighted,
+			String text) {
 		BookSwap swap = active(me, id);
 		OwnedPassage passage = passages.find(passageId)
 				.filter(found -> swap.involves(found.userId()) && found.isbn13().equals(swap.isbn13()))
 				.orElseThrow(() -> ApiError.notFound("PASSAGE_NOT_FOUND"));
-		passages.writeNote(me, passage.id(), sentence, text);
+		passages.mark(me, passage.id(), sentence, underlined, highlighted, text);
+	}
+
+	/**
+	 * A book that is being read with a friend stays on the shelf: the swap is of a book
+	 * both have. A request that is only waiting does not hold the book; accepting it looks
+	 * again at who has it.
+	 */
+	@EventListener
+	void on(ShelfBookLeaving leaving) {
+		boolean reading = swaps.findByRequesterIdOrAddresseeId(leaving.userId(), leaving.userId()).stream()
+				.anyMatch(swap -> swap.status() == BookSwap.Status.ACTIVE && swap.isbn13().equals(leaving.isbn13()));
+		if (reading) {
+			throw ApiError.conflict("SWAPPING");
+		}
 	}
 
 	/**

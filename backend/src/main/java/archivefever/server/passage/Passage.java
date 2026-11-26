@@ -69,4 +69,10 @@ class Passage {
 		return createdAt;
 	}
 
+	/** The reader has corrected the passage; when it was collected stays as it was. */
+	void rewrite(Integer page, String text) {
+		this.page = page;
+		this.text = text;
+	}
+
 }
